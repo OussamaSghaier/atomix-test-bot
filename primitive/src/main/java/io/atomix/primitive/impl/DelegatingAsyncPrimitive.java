@@ -15,22 +15,21 @@
  */
 package io.atomix.primitive.impl;
 
-import com.google.common.base.MoreObjects;
-import io.atomix.primitive.AsyncPrimitive;
-import io.atomix.primitive.PrimitiveState;
-import io.atomix.primitive.PrimitiveType;
-import io.atomix.primitive.protocol.PrimitiveProtocol;
-
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+
+import com.google.common.base.MoreObjects;
+import io.atomix.primitive.AsyncPrimitive;
+import io.atomix.primitive.ManagedAsyncPrimitive;
+import io.atomix.primitive.PrimitiveState;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Base class for primitive delegates.
  */
-public abstract class DelegatingAsyncPrimitive<T extends AsyncPrimitive> implements AsyncPrimitive {
+public abstract class DelegatingAsyncPrimitive<T extends AsyncPrimitive> implements AsyncPrimitive, ManagedAsyncPrimitive<T> {
   private final T primitive;
 
   public DelegatingAsyncPrimitive(T primitive) {
@@ -52,16 +51,6 @@ public abstract class DelegatingAsyncPrimitive<T extends AsyncPrimitive> impleme
   }
 
   @Override
-  public PrimitiveType type() {
-    return primitive.type();
-  }
-
-  @Override
-  public PrimitiveProtocol protocol() {
-    return primitive.protocol();
-  }
-
-  @Override
   public CompletableFuture<Void> delete() {
     return primitive.delete();
   }
@@ -79,6 +68,12 @@ public abstract class DelegatingAsyncPrimitive<T extends AsyncPrimitive> impleme
   @Override
   public CompletableFuture<Void> close() {
     return primitive.close();
+  }
+
+  @Override
+  @SuppressWarnings("unchecked")
+  public CompletableFuture<T> connect() {
+    return ((ManagedAsyncPrimitive) primitive).connect().thenApply(v -> this);
   }
 
   @Override

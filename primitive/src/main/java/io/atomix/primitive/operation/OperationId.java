@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-present Open Networking Foundation
+ * Copyright 2019-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,53 +15,25 @@
  */
 package io.atomix.primitive.operation;
 
-import io.atomix.primitive.operation.impl.DefaultOperationId;
-import io.atomix.utils.Identifier;
+import java.util.Objects;
 
 /**
- * Raft operation identifier.
+ * Operation ID.
  */
-public interface OperationId extends Identifier<String> {
+public abstract class OperationId<T, U> {
+  private final String id;
 
-  /**
-   * Returns a new command operation identifier.
-   *
-   * @param id the command identifier
-   * @return the operation identifier
-   */
-  static OperationId command(String id) {
-    return from(id, OperationType.COMMAND);
+  public OperationId(String id) {
+    this.id = id;
   }
 
   /**
-   * Returns a new query operation identifier.
+   * Returns the operation ID.
    *
-   * @param id the query identifier
-   * @return the operation identifier
+   * @return the operation ID
    */
-  static OperationId query(String id) {
-    return from(id, OperationType.QUERY);
-  }
-
-  /**
-   * Returns a new operation identifier.
-   *
-   * @param id the operation name
-   * @param type the operation type
-   * @return the operation identifier
-   */
-  static OperationId from(String id, OperationType type) {
-    return new DefaultOperationId(id, type);
-  }
-
-  /**
-   * Simplifies the given operation identifier.
-   *
-   * @param operationId the operation identifier to simplify
-   * @return the simplified operation identifier
-   */
-  static OperationId simplify(OperationId operationId) {
-    return new DefaultOperationId(operationId.id(), operationId.type());
+  public String id() {
+    return id;
   }
 
   /**
@@ -69,5 +41,19 @@ public interface OperationId extends Identifier<String> {
    *
    * @return the operation type
    */
-  OperationType type();
+  public abstract OperationType type();
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(id(), type());
+  }
+
+  @Override
+  public boolean equals(Object object) {
+    if (object.getClass() == getClass()) {
+      OperationId that = (OperationId) object;
+      return this.id.equals(that.id) && this.type().equals(that.type());
+    }
+    return false;
+  }
 }

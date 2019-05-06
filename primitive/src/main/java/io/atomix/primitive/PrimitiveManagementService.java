@@ -21,21 +21,13 @@ import io.atomix.cluster.messaging.ClusterEventService;
 import io.atomix.primitive.partition.PartitionGroupTypeRegistry;
 import io.atomix.primitive.partition.PartitionService;
 import io.atomix.primitive.protocol.PrimitiveProtocolTypeRegistry;
-import io.atomix.primitive.serialization.SerializationService;
-
-import java.util.concurrent.ScheduledExecutorService;
+import io.atomix.primitive.session.SessionIdService;
+import io.atomix.utils.concurrent.ThreadContextFactory;
 
 /**
  * Primitive management service.
  */
 public interface PrimitiveManagementService {
-
-  /**
-   * Returns the primitive thread pool.
-   *
-   * @return the primitive thread pool
-   */
-  ScheduledExecutorService getExecutorService();
 
   /**
    * Returns the cluster service.
@@ -57,13 +49,6 @@ public interface PrimitiveManagementService {
    * @return the cluster event service
    */
   ClusterEventService getEventService();
-
-  /**
-   * Returns the primitive serialization service.
-   *
-   * @return the primitive serialization service
-   */
-  SerializationService getSerializationService();
 
   /**
    * Returns the partition service.
@@ -106,5 +91,19 @@ public interface PrimitiveManagementService {
    * @return the partition group type registry
    */
   PartitionGroupTypeRegistry getPartitionGroupTypeRegistry();
+
+  /**
+   * Returns the session ID service.
+   *
+   * @return the session ID service
+   */
+  SessionIdService getSessionIdService();
+
+  /**
+   * Returns the thread context factory.
+   *
+   * @return the thread context factory
+   */
+  ThreadContextFactory getThreadFactory();
 
 }

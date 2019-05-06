@@ -1,141 +1,186 @@
-/*
- * Copyright 2017-present Open Networking Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package io.atomix.primitive.session;
 
-import io.atomix.primitive.PrimitiveState;
-import io.atomix.primitive.PrimitiveType;
-import io.atomix.primitive.event.EventType;
-import io.atomix.primitive.event.PrimitiveEvent;
-import io.atomix.primitive.operation.PrimitiveOperation;
-import io.atomix.primitive.partition.PartitionId;
-import io.atomix.utils.concurrent.ThreadContext;
-
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
+
+import com.google.protobuf.Message;
+import io.atomix.primitive.operation.CommandId;
+import io.atomix.primitive.operation.QueryId;
+import io.atomix.primitive.operation.StreamType;
+import io.atomix.primitive.session.impl.CloseSessionRequest;
+import io.atomix.primitive.session.impl.CloseSessionResponse;
+import io.atomix.primitive.session.impl.KeepAliveRequest;
+import io.atomix.primitive.session.impl.KeepAliveResponse;
+import io.atomix.primitive.session.impl.OpenSessionRequest;
+import io.atomix.primitive.session.impl.OpenSessionResponse;
+import io.atomix.primitive.session.impl.SessionCommandContext;
+import io.atomix.primitive.session.impl.SessionQueryContext;
+import io.atomix.primitive.session.impl.SessionResponseContext;
+import io.atomix.primitive.session.impl.SessionStreamContext;
+import io.atomix.primitive.util.ByteBufferDecoder;
+import io.atomix.primitive.util.ByteStringEncoder;
+import io.atomix.utils.stream.StreamHandler;
+import org.apache.commons.lang3.tuple.Pair;
 
 /**
- * Partition proxy.
+ * Session client.
  */
 public interface SessionClient {
 
   /**
-   * Returns the primitive name.
+   * Executes a command on the service.
    *
-   * @return the primitive name
+   * @param command the command to execute
+   * @param context the command context
+   * @param request the request
+   * @param encoder the request encoder
+   * @param decoder the response decoder
+   * @param <T>     the request type
+   * @param <U>     the response type
+   * @return a future to be completed with the response
    */
-  String name();
+  <T extends Message, U extends Message> CompletableFuture<Pair<SessionResponseContext, U>> execute(
+      CommandId<T, U> command,
+      SessionCommandContext context,
+      T request,
+      ByteStringEncoder<T> encoder,
+      ByteBufferDecoder<U> decoder);
 
   /**
-   * Returns the client proxy type.
+   * Executes a query on the service.
    *
-   * @return The client proxy type.
+   * @param query   the query to execute
+   * @param context the query context
+   * @param request the request
+   * @param encoder the request encoder
+   * @param decoder the response decoder
+   * @param <T>     the request type
+   * @param <U>     the response type
+   * @return a future to be completed with the response
    */
-  PrimitiveType type();
+  <T extends Message, U extends Message> CompletableFuture<Pair<SessionResponseContext, U>> execute(
+      QueryId<T, U> query,
+      SessionQueryContext context,
+      T request,
+      ByteStringEncoder<T> encoder,
+      ByteBufferDecoder<U> decoder);
 
   /**
-   * Returns the session state.
+   * Executes an asynchronous command on the service.
    *
-   * @return The session state.
+   * @param command    the command to execute
+   * @param streamType the stream type
+   * @param context    the command context
+   * @param request    the request
+   * @param encoder    the request encoder
+   * @param decoder    the response decoder
+   * @param <T>        the request type
+   * @param <U>        the response type
+   * @return a future to be completed with the response
    */
-  PrimitiveState getState();
+  <T extends Message, U extends Message> CompletableFuture<Pair<SessionResponseContext, U>> execute(
+      CommandId<T, U> command,
+      StreamType<U> streamType,
+      SessionCommandContext context,
+      T request,
+      ByteStringEncoder<T> encoder,
+      ByteBufferDecoder<U> decoder);
 
   /**
-   * Returns the proxy session identifier.
+   * Executes an asynchronous query on the service.
    *
-   * @return The proxy session identifier
+   * @param query      the query to execute
+   * @param streamType the stream type
+   * @param context    the query context
+   * @param request    the request
+   * @param encoder    the request encoder
+   * @param decoder    the response decoder
+   * @param <T>        the request type
+   * @param <U>        the response type
+   * @return a future to be completed with the response
    */
-  SessionId sessionId();
+  <T extends Message, U extends Message> CompletableFuture<Pair<SessionResponseContext, U>> execute(
+      QueryId<T, U> query,
+      StreamType<U> streamType,
+      SessionQueryContext context,
+      T request,
+      ByteStringEncoder<T> encoder,
+      ByteBufferDecoder<U> decoder);
 
   /**
-   * Returns the partition identifier.
+   * Executes a streaming command on the service.
    *
-   * @return the partition identifier.
+   * @param command    the command to execute
+   * @param streamType the stream type
+   * @param context    the command context
+   * @param request    the request
+   * @param handler    the response handler
+   * @param encoder    the request encoder
+   * @param decoder    the response decoder
+   * @param <T>        the request type
+   * @param <U>        the response type
+   * @return a future to be completed with the response
    */
-  PartitionId partitionId();
+  <T extends Message, U extends Message> CompletableFuture<SessionResponseContext> execute(
+      CommandId<T, U> command,
+      StreamType<U> streamType,
+      SessionCommandContext context,
+      T request,
+      StreamHandler<Pair<SessionStreamContext, U>> handler,
+      ByteStringEncoder<T> encoder,
+      ByteBufferDecoder<U> decoder);
 
   /**
-   * Returns the partition thread context.
+   * Executes a streaming query on the service.
    *
-   * @return the partition thread context
+   * @param query      the query to execute
+   * @param streamType the stream type
+   * @param context    the query context
+   * @param request    the request
+   * @param handler    the response handler
+   * @param encoder    the request encoder
+   * @param decoder    the response decoder
+   * @param <T>        the request type
+   * @param <U>        the response type
+   * @return a future to be completed with the response
    */
-  ThreadContext context();
+  <T extends Message, U extends Message> CompletableFuture<SessionResponseContext> execute(
+      QueryId<T, U> query,
+      StreamType<U> streamType,
+      SessionQueryContext context,
+      T request,
+      StreamHandler<Pair<SessionStreamContext, U>> handler,
+      ByteStringEncoder<T> encoder,
+      ByteBufferDecoder<U> decoder);
 
   /**
-   * Executes an operation to the cluster.
+   * Opens a session.
    *
-   * @param operation the operation to execute
-   * @return a future to be completed with the operation result
-   * @throws NullPointerException if {@code operation} is null
+   * @param request the open session request
+   * @return a future to be completed with the open session response
    */
-  CompletableFuture<byte[]> execute(PrimitiveOperation operation);
+  CompletableFuture<OpenSessionResponse> openSession(OpenSessionRequest request);
 
   /**
-   * Adds an event listener.
+   * Sends a session keep-alive.
    *
-   * @param eventType the event type for which to add the listener
-   * @param listener  the event listener to add
+   * @param request the keep-alive request
+   * @return a future to be completed with the keep-alive response
    */
-  void addEventListener(EventType eventType, Consumer<PrimitiveEvent> listener);
+  CompletableFuture<KeepAliveResponse> keepAlive(KeepAliveRequest request);
 
   /**
-   * Removes an event listener.
+   * Closes a session.
    *
-   * @param eventType the event type for which to remove the listener
-   * @param listener  the event listener to remove
+   * @param request the close session request
+   * @return a future to be completed with the close session response
    */
-  void removeEventListener(EventType eventType, Consumer<PrimitiveEvent> listener);
+  CompletableFuture<CloseSessionResponse> closeSession(CloseSessionRequest request);
 
   /**
-   * Registers a session state change listener.
-   *
-   * @param listener The callback to call when the session state changes.
-   */
-  void addStateChangeListener(Consumer<PrimitiveState> listener);
-
-  /**
-   * Removes a state change listener.
-   *
-   * @param listener the state change listener to remove
-   */
-  void removeStateChangeListener(Consumer<PrimitiveState> listener);
-
-  /**
-   * Connects the proxy.
-   *
-   * @return a future to be completed once the proxy has been connected
-   */
-  CompletableFuture<SessionClient> connect();
-
-  /**
-   * Closes the proxy.
-   *
-   * @return a future to be completed once the proxy has been closed
-   */
-  CompletableFuture<Void> close();
-
-  /**
-   * Closes the session and deletes the service.
+   * Deletes the service.
    *
    * @return a future to be completed once the service has been deleted
    */
   CompletableFuture<Void> delete();
 
-  /**
-   * Partition proxy builder.
-   */
-  abstract class Builder implements io.atomix.utils.Builder<SessionClient> {
-  }
 }

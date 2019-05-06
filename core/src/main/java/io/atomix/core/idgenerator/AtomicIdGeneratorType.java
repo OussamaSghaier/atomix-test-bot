@@ -15,18 +15,17 @@
  */
 package io.atomix.core.idgenerator;
 
-import io.atomix.core.counter.impl.DefaultAtomicCounterService;
 import io.atomix.core.idgenerator.impl.DelegatingAtomicIdGeneratorBuilder;
 import io.atomix.primitive.PrimitiveManagementService;
 import io.atomix.primitive.PrimitiveType;
-import io.atomix.primitive.service.PrimitiveService;
-import io.atomix.primitive.service.ServiceConfig;
+import io.atomix.utils.component.Component;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 
 /**
  * Atomic ID generator primitive type.
  */
+@Component
 public class AtomicIdGeneratorType implements PrimitiveType<AtomicIdGeneratorBuilder, AtomicIdGeneratorConfig, AtomicIdGenerator> {
   private static final String NAME = "atomic-id-generator";
   private static final AtomicIdGeneratorType INSTANCE = new AtomicIdGeneratorType();
@@ -43,11 +42,6 @@ public class AtomicIdGeneratorType implements PrimitiveType<AtomicIdGeneratorBui
   @Override
   public String name() {
     return NAME;
-  }
-
-  @Override
-  public PrimitiveService newService(ServiceConfig config) {
-    return new DefaultAtomicCounterService();
   }
 
   @Override

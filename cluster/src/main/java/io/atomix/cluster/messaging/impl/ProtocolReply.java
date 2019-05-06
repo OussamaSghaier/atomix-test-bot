@@ -21,77 +21,18 @@ import io.atomix.utils.misc.ArraySizeHashPrinter;
 /**
  * Internal reply message.
  */
-public final class ProtocolReply extends ProtocolMessage {
+public class ProtocolReply extends ProtocolMessage {
+  private final ProtocolStatus status;
+  private final byte[] payload;
 
-  /**
-   * Message status.
-   */
-  public enum Status {
-
-    // NOTE: For backwards compatibility enum constant IDs should not be changed.
-
-    /**
-     * All ok.
-     */
-    OK(0),
-
-    /**
-     * Response status signifying no registered handler.
-     */
-    ERROR_NO_HANDLER(1),
-
-    /**
-     * Response status signifying an exception handling the message.
-     */
-    ERROR_HANDLER_EXCEPTION(2),
-
-    /**
-     * Response status signifying invalid message structure.
-     */
-    PROTOCOL_EXCEPTION(3);
-
-    private final int id;
-
-    Status(int id) {
-      this.id = id;
-    }
-
-    /**
-     * Returns the unique status ID.
-     *
-     * @return the unique status ID.
-     */
-    public int id() {
-      return id;
-    }
-
-    /**
-     * Returns the status enum associated with the given ID.
-     *
-     * @param id the status ID.
-     * @return the status enum for the given ID.
-     */
-    public static Status forId(int id) {
-      switch (id) {
-        case 0:
-          return OK;
-        case 1:
-          return ERROR_NO_HANDLER;
-        case 2:
-          return ERROR_HANDLER_EXCEPTION;
-        case 3:
-          return PROTOCOL_EXCEPTION;
-        default:
-          throw new IllegalArgumentException("Unknown status ID " + id);
-      }
-    }
+  public ProtocolReply(long id, ProtocolStatus status) {
+    this(id, status, EMPTY_PAYLOAD);
   }
 
-  private final Status status;
-
-  public ProtocolReply(long id, byte[] payload, Status status) {
-    super(id, payload);
+  public ProtocolReply(long id, ProtocolStatus status, byte[] payload) {
+    super(id);
     this.status = status;
+    this.payload = payload;
   }
 
   @Override
@@ -99,8 +40,12 @@ public final class ProtocolReply extends ProtocolMessage {
     return Type.REPLY;
   }
 
-  public Status status() {
+  public ProtocolStatus status() {
     return status;
+  }
+
+  public byte[] payload() {
+    return payload;
   }
 
   @Override

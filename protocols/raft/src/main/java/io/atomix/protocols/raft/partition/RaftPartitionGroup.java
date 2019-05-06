@@ -15,6 +15,21 @@
  */
 package io.atomix.protocols.raft.partition;
 
+import java.io.File;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -32,9 +47,10 @@ import io.atomix.primitive.partition.PartitionMetadata;
 import io.atomix.primitive.protocol.PrimitiveProtocol;
 import io.atomix.primitive.protocol.ProxyProtocol;
 import io.atomix.protocols.raft.MultiRaftProtocol;
-import io.atomix.protocols.raft.RaftClient;
-import io.atomix.protocols.raft.impl.DefaultRaftClient;
+import io.atomix.raft.RaftClient;
+import io.atomix.raft.impl.DefaultRaftClient;
 import io.atomix.storage.StorageLevel;
+import io.atomix.utils.component.Component;
 import io.atomix.utils.concurrent.BlockingAwareThreadPoolContextFactory;
 import io.atomix.utils.concurrent.Futures;
 import io.atomix.utils.concurrent.ThreadContextFactory;
@@ -45,20 +61,6 @@ import io.atomix.utils.serializer.Namespace;
 import io.atomix.utils.serializer.Namespaces;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.File;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -82,6 +84,7 @@ public class RaftPartitionGroup implements ManagedPartitionGroup {
   /**
    * Raft partition group type.
    */
+  @Component
   public static class Type implements PartitionGroup.Type<RaftPartitionGroupConfig> {
     private static final String NAME = "raft";
 
@@ -121,7 +124,10 @@ public class RaftPartitionGroup implements ManagedPartitionGroup {
     List<RaftPartition> partitions = new ArrayList<>(config.getPartitions());
     for (int i = 0; i < config.getPartitions(); i++) {
       partitions.add(new RaftPartition(
-          PartitionId.from(config.getName(), i + 1),
+          PartitionId.newBuilder()
+              .setGroup(config.getName())
+              .setPartition(i + 1)
+              .build(),
           config,
           new File(partitionsDir, String.valueOf(i + 1)),
           threadContextFactory));
@@ -158,7 +164,7 @@ public class RaftPartitionGroup implements ManagedPartitionGroup {
       this.partitions.put(p.id(), p);
       this.sortedPartitionIds.add(p.id());
     });
-    Collections.sort(sortedPartitionIds);
+    Collections.sort(sortedPartitionIds, Comparator.comparingInt(PartitionId::getPartition));
   }
 
   @Override
