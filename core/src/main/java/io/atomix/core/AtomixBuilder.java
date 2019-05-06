@@ -15,18 +15,18 @@
  */
 package io.atomix.core;
 
+import io.atomix.cluster.AtomixClusterBuilder;
+import io.atomix.cluster.MemberId;
+import io.atomix.cluster.discovery.NodeDiscoveryProvider;
+import io.atomix.cluster.protocol.GroupMembershipProtocol;
+import io.atomix.core.profile.Profile;
+import io.atomix.primitive.partition.ManagedPartitionGroup;
+import io.atomix.utils.net.Address;
+
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
-
-import io.atomix.cluster.AbstractClusterBuilder;
-import io.atomix.cluster.MemberId;
-import io.atomix.cluster.discovery.NodeDiscoveryProvider;
-import io.atomix.cluster.protocol.GroupMembershipProtocol;
-import io.atomix.primitive.partition.ManagedPartitionGroup;
-import io.atomix.utils.component.Component;
-import io.atomix.utils.net.Address;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -54,24 +54,14 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * Backing the builder is an {@link AtomixConfig} which is loaded when the builder is initially constructed. To load
  * a configuration from a file, use {@link Atomix#builder(String)}.
  */
-public class AtomixBuilder extends AbstractClusterBuilder<Atomix> {
+public class AtomixBuilder extends AtomixClusterBuilder {
   private final AtomixConfig config;
-  private final ClassLoader classLoader;
-  private final Component.Scope scope;
+  private final AtomixRegistry registry;
 
-  public AtomixBuilder(Component.Scope scope) {
-    this(new AtomixConfig(), AtomixBuilder.class.getClassLoader(), scope);
-  }
-
-  protected AtomixBuilder(AtomixConfig config, ClassLoader classLoader) {
-    this(config, classLoader, Component.Scope.RUNTIME);
-  }
-
-  protected AtomixBuilder(AtomixConfig config, ClassLoader classLoader, Component.Scope scope) {
+  protected AtomixBuilder(AtomixConfig config, AtomixRegistry registry) {
     super(config.getClusterConfig());
     this.config = checkNotNull(config);
-    this.classLoader = checkNotNull(classLoader);
-    this.scope = checkNotNull(scope);
+    this.registry = checkNotNull(registry);
   }
 
   /**
@@ -99,6 +89,50 @@ public class AtomixBuilder extends AbstractClusterBuilder<Atomix> {
   }
 
   /**
+   * Sets the Atomix profiles.
+   * <p>
+   * Profiles are common configurations that will be applied to the instance configuration when the {@link Atomix}
+   * instance is constructed.
+   *
+   * @param profiles the profiles
+   * @return the Atomix builder
+   * @throws NullPointerException if the profiles are null
+   */
+  public AtomixBuilder withProfiles(Profile... profiles) {
+    return withProfiles(Arrays.asList(checkNotNull(profiles)));
+  }
+
+  /**
+   * Sets the Atomix profiles.
+   * <p>
+   * Profiles are common configurations that will be applied to the instance configuration when the {@link Atomix}
+   * instance is constructed.
+   *
+   * @param profiles the profiles
+   * @return the Atomix builder
+   * @throws NullPointerException if the profiles are null
+   */
+  public AtomixBuilder withProfiles(Collection<Profile> profiles) {
+    profiles.forEach(profile -> config.addProfile(profile.config()));
+    return this;
+  }
+
+  /**
+   * Adds an Atomix profile.
+   * <p>
+   * Profiles are common configurations that will be applied to the instance configuration when the {@link Atomix}
+   * instance is constructed.
+   *
+   * @param profile the profile to add
+   * @return the Atomix builder
+   * @throws NullPointerException if the profile is null
+   */
+  public AtomixBuilder addProfile(Profile profile) {
+    config.addProfile(profile.config());
+    return this;
+  }
+
+  /**
    * Sets the system management partition group.
    * <p>
    * The system management group must be configured for stateful instances. This group will be used to store primitive
@@ -122,7 +156,7 @@ public class AtomixBuilder extends AbstractClusterBuilder<Atomix> {
    * @return the Atomix builder
    */
   public AtomixBuilder withManagementGroup(ManagedPartitionGroup systemManagementGroup) {
-    config.setSystemGroup(systemManagementGroup.config());
+    config.setManagementGroup(systemManagementGroup.config());
     return this;
   }
 
@@ -495,6 +529,6 @@ public class AtomixBuilder extends AbstractClusterBuilder<Atomix> {
    */
   @Override
   public Atomix build() {
-    return new Atomix(config, classLoader, scope);
+    return new Atomix(config, registry);
   }
 }

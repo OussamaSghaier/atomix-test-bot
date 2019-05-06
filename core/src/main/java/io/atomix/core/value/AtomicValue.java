@@ -15,11 +15,7 @@
  */
 package io.atomix.core.value;
 
-import java.util.Optional;
-
-import io.atomix.primitive.PrimitiveType;
 import io.atomix.primitive.SyncPrimitive;
-import io.atomix.utils.time.Versioned;
 
 /**
  * Distributed version of java.util.concurrent.atomic.AtomicReference.
@@ -27,10 +23,6 @@ import io.atomix.utils.time.Versioned;
  * @param <V> value type
  */
 public interface AtomicValue<V> extends SyncPrimitive {
-  @Override
-  default PrimitiveType type() {
-    return AtomicValueType.instance();
-  }
 
   /**
    * Atomically sets the value to the given updated value if the current value is equal to the expected value.
@@ -42,26 +34,14 @@ public interface AtomicValue<V> extends SyncPrimitive {
    * @param update the new value
    * @return true if successful. false return indicates that the actual value was not equal to the expected value.
    */
-  Optional<Versioned<V>> compareAndSet(V expect, V update);
-
-  /**
-   * Atomically sets the value to the given updated value if the current value is equal to the expected value.
-   * <p>
-   * IMPORTANT: Equality is based on the equality of the serialized byte[] representations.
-   * <p>
-   *
-   * @param version the expected version
-   * @param value the new value
-   * @return true if successful. false return indicates that the actual value was not equal to the expected value.
-   */
-  Optional<Versioned<V>> compareAndSet(long version, V value);
+  boolean compareAndSet(V expect, V update);
 
   /**
    * Gets the current value.
    *
    * @return current value
    */
-  Versioned<V> get();
+  V get();
 
   /**
    * Atomically sets to the given value and returns the old value.
@@ -69,15 +49,14 @@ public interface AtomicValue<V> extends SyncPrimitive {
    * @param value the new value
    * @return previous value
    */
-  Versioned<V> getAndSet(V value);
+  V getAndSet(V value);
 
   /**
    * Sets to the given value.
    *
    * @param value new value
-   * @return the updated value
    */
-  Versioned<V> set(V value);
+  void set(V value);
 
   /**
    * Registers the specified listener to be notified whenever the atomic value is updated.

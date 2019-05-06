@@ -15,6 +15,22 @@
  */
 package io.atomix.protocols.raft.partition.impl;
 
+import io.atomix.cluster.ClusterMembershipService;
+import io.atomix.cluster.MemberId;
+import io.atomix.cluster.messaging.ClusterCommunicationService;
+import io.atomix.primitive.PrimitiveTypeRegistry;
+import io.atomix.primitive.partition.Partition;
+import io.atomix.protocols.raft.RaftServer;
+import io.atomix.protocols.raft.partition.RaftPartition;
+import io.atomix.protocols.raft.partition.RaftPartitionGroupConfig;
+import io.atomix.protocols.raft.storage.RaftStorage;
+import io.atomix.storage.StorageException;
+import io.atomix.utils.Managed;
+import io.atomix.utils.concurrent.Futures;
+import io.atomix.utils.concurrent.ThreadContextFactory;
+import io.atomix.utils.serializer.Serializer;
+import org.slf4j.Logger;
+
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -22,29 +38,15 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-
-import io.atomix.cluster.MemberId;
-import io.atomix.cluster.messaging.ClusterCommunicationService;
-import io.atomix.cluster.messaging.ClusterStreamingService;
-import io.atomix.primitive.partition.Partition;
-import io.atomix.primitive.service.StateMachine;
-import io.atomix.protocols.raft.partition.RaftPartition;
-import io.atomix.protocols.raft.partition.RaftPartitionGroupConfig;
-import io.atomix.raft.RaftServer;
-import io.atomix.raft.storage.RaftStorage;
-import io.atomix.storage.StorageException;
-import io.atomix.utils.concurrent.Futures;
-import io.atomix.utils.concurrent.ThreadContextFactory;
-import org.slf4j.Logger;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * {@link Partition} server.
  */
-public class RaftPartitionServer {
+public class RaftPartitionServer implements Managed<RaftPartitionServer> {
 
   private final Logger log = getLogger(getClass());
 
@@ -54,8 +56,9 @@ public class RaftPartitionServer {
   private final MemberId localMemberId;
   private final RaftPartition partition;
   private final RaftPartitionGroupConfig config;
+  private final ClusterMembershipService membershipService;
   private final ClusterCommunicationService clusterCommunicator;
-  private final ClusterStreamingService streamingService;
+  private final PrimitiveTypeRegistry primitiveTypes;
   private final ThreadContextFactory threadContextFactory;
   private RaftServer server;
 
@@ -63,24 +66,21 @@ public class RaftPartitionServer {
       RaftPartition partition,
       RaftPartitionGroupConfig config,
       MemberId localMemberId,
+      ClusterMembershipService membershipService,
       ClusterCommunicationService clusterCommunicator,
-      ClusterStreamingService streamingService,
+      PrimitiveTypeRegistry primitiveTypes,
       ThreadContextFactory threadContextFactory) {
     this.partition = partition;
     this.config = config;
     this.localMemberId = localMemberId;
+    this.membershipService = membershipService;
     this.clusterCommunicator = clusterCommunicator;
-    this.streamingService = streamingService;
+    this.primitiveTypes = primitiveTypes;
     this.threadContextFactory = threadContextFactory;
   }
 
-  /**
-   * Starts the partition server.
-   *
-   * @param stateMachine the state machine
-   * @return a future to be completed once the server is started
-   */
-  public CompletableFuture<RaftPartitionServer> start(StateMachine stateMachine) {
+  @Override
+  public CompletableFuture<RaftPartitionServer> start() {
     log.info("Starting server for partition {}", partition.id());
     CompletableFuture<RaftServer> serverOpenFuture;
     if (partition.members().contains(localMemberId)) {
@@ -89,15 +89,12 @@ public class RaftPartitionServer {
       }
       synchronized (this) {
         try {
-          server = buildServer(stateMachine);
+          server = buildServer();
         } catch (StorageException e) {
           return Futures.exceptionalFuture(e);
         }
       }
-      serverOpenFuture = server.bootstrap(partition.members()
-          .stream()
-          .map(MemberId::id)
-          .collect(Collectors.toList()));
+      serverOpenFuture = server.bootstrap(partition.members());
     } else {
       serverOpenFuture = CompletableFuture.completedFuture(null);
     }
@@ -110,11 +107,7 @@ public class RaftPartitionServer {
     }).thenApply(v -> this);
   }
 
-  /**
-   * Stops the partition server.
-   *
-   * @return a future to be completed once the server is stopped
-   */
+  @Override
   public CompletableFuture<Void> stop() {
     return server.shutdown();
   }
@@ -160,14 +153,15 @@ public class RaftPartitionServer {
     }
   }
 
-  private RaftServer buildServer(StateMachine stateMachine) {
-    return RaftServer.builder(localMemberId.id())
+  private RaftServer buildServer() {
+    return RaftServer.builder(localMemberId)
         .withName(partition.name())
+        .withMembershipService(membershipService)
         .withProtocol(new RaftServerCommunicator(
             partition.name(),
-            clusterCommunicator,
-            streamingService))
-        .withStateMachine(new RaftPartitionStateMachine(stateMachine))
+            Serializer.using(RaftNamespaces.RAFT_PROTOCOL),
+            clusterCommunicator))
+        .withPrimitiveTypes(primitiveTypes)
         .withElectionTimeout(Duration.ofMillis(ELECTION_TIMEOUT_MILLIS))
         .withHeartbeatInterval(Duration.ofMillis(HEARTBEAT_INTERVAL_MILLIS))
         .withStorage(RaftStorage.builder()
@@ -180,8 +174,26 @@ public class RaftPartitionServer {
             .withDynamicCompaction(config.getCompactionConfig().isDynamic())
             .withFreeDiskBuffer(config.getCompactionConfig().getFreeDiskBuffer())
             .withFreeMemoryBuffer(config.getCompactionConfig().getFreeMemoryBuffer())
+            .withNamespace(RaftNamespaces.RAFT_STORAGE)
             .build())
         .withThreadContextFactory(threadContextFactory)
         .build();
+  }
+
+  public CompletableFuture<Void> join(Collection<MemberId> otherMembers) {
+    log.info("Joining partition {} ({})", partition.id(), partition.name());
+    server = buildServer();
+    return server.join(otherMembers).whenComplete((r, e) -> {
+      if (e == null) {
+        log.debug("Successfully joined partition {} ({})", partition.id(), partition.name());
+      } else {
+        log.warn("Failed to join partition {} ({})", partition.id(), partition.name(), e);
+      }
+    }).thenApply(v -> null);
+  }
+
+  @Override
+  public boolean isRunning() {
+    return server.isRunning();
   }
 }

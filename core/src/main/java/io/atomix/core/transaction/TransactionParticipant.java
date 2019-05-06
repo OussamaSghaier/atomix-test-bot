@@ -15,21 +15,16 @@
  */
 package io.atomix.core.transaction;
 
-import java.util.concurrent.CompletableFuture;
-
 import io.atomix.primitive.DistributedPrimitive;
 import io.atomix.primitive.protocol.ProxyProtocol;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Transaction participant.
  */
 public interface TransactionParticipant<T> extends DistributedPrimitive {
-
-  /**
-   * Returns the protocol.
-   *
-   * @return the protocol
-   */
+  @Override
   ProxyProtocol protocol();
 
   /**

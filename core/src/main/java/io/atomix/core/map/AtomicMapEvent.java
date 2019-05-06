@@ -36,17 +36,17 @@ public class AtomicMapEvent<K, V> extends AbstractEvent<AtomicMapEvent.Type, K> 
     /**
      * Entry inserted into the map.
      */
-    INSERTED,
+    INSERT,
 
     /**
      * Existing map entry updated.
      */
-    UPDATED,
+    UPDATE,
 
     /**
      * Entry removed from map.
      */
-    REMOVED
+    REMOVE
   }
 
   private final Versioned<V> newValue;

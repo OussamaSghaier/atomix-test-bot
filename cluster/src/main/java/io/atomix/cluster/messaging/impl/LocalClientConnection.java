@@ -18,7 +18,6 @@ package io.atomix.cluster.messaging.impl;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.BiConsumer;
 
 /**
  * Local client-side connection.
@@ -26,23 +25,21 @@ import java.util.function.BiConsumer;
 final class LocalClientConnection extends AbstractClientConnection {
   private final LocalServerConnection serverConnection;
 
-  LocalClientConnection(
-      ScheduledExecutorService executorService,
-      HandlerRegistry<String, BiConsumer<ProtocolMessage, ServerConnection>> handlers) {
+  LocalClientConnection(ScheduledExecutorService executorService, HandlerRegistry handlers) {
     super(executorService);
     this.serverConnection = new LocalServerConnection(handlers, this);
   }
 
   @Override
-  public CompletableFuture<Void> sendAsync(ProtocolMessage message) {
+  public CompletableFuture<Void> sendAsync(ProtocolRequest message) {
     serverConnection.dispatch(message);
     return CompletableFuture.completedFuture(null);
   }
 
   @Override
-  public CompletableFuture<ProtocolReply> sendAndReceive(String subject, ProtocolMessage message, Duration timeout) {
-    CompletableFuture<ProtocolReply> future = new CompletableFuture<>();
-    new Callback(message.id(), subject, timeout, future);
+  public CompletableFuture<byte[]> sendAndReceive(ProtocolRequest message, Duration timeout) {
+    CompletableFuture<byte[]> future = new CompletableFuture<>();
+    new Callback(message.id(), message.subject(), timeout, future);
     serverConnection.dispatch(message);
     return future;
   }

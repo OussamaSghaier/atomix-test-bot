@@ -15,21 +15,23 @@
  */
 package io.atomix.cluster.messaging.impl;
 
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import io.atomix.cluster.messaging.ManagedUnicastService;
+import io.atomix.cluster.messaging.UnicastService;
+import io.atomix.utils.net.Address;
+
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import io.atomix.cluster.messaging.UnicastService;
-import io.atomix.utils.net.Address;
-
 /**
  * Test unicast service.
  */
-public class TestUnicastService implements UnicastService {
+public class TestUnicastService implements ManagedUnicastService {
   private final Address address;
   private final Map<Address, TestUnicastService> services;
   private final Map<String, Map<BiConsumer<Address, byte[]>, Executor>> listeners = Maps.newConcurrentMap();
@@ -39,7 +41,6 @@ public class TestUnicastService implements UnicastService {
   public TestUnicastService(Address address, Map<Address, TestUnicastService> services) {
     this.address = address;
     this.services = services;
-    services.put(address, this);
   }
 
   /**
@@ -104,5 +105,24 @@ public class TestUnicastService implements UnicastService {
         this.listeners.remove(subject);
       }
     }
+  }
+
+  @Override
+  public CompletableFuture<UnicastService> start() {
+    services.put(address, this);
+    started.set(true);
+    return CompletableFuture.completedFuture(this);
+  }
+
+  @Override
+  public boolean isRunning() {
+    return started.get();
+  }
+
+  @Override
+  public CompletableFuture<Void> stop() {
+    services.remove(address);
+    started.set(false);
+    return CompletableFuture.completedFuture(null);
   }
 }

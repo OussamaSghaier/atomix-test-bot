@@ -15,8 +15,12 @@
  */
 package io.atomix.core.transaction;
 
+import io.atomix.core.impl.CoreTransactionService;
+import io.atomix.core.transaction.impl.DefaultTransactionBuilder;
 import io.atomix.primitive.PrimitiveManagementService;
 import io.atomix.primitive.PrimitiveType;
+import io.atomix.primitive.service.PrimitiveService;
+import io.atomix.primitive.service.ServiceConfig;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 
@@ -42,13 +46,18 @@ public class TransactionType implements PrimitiveType<TransactionBuilder, Transa
   }
 
   @Override
+  public PrimitiveService newService(ServiceConfig config) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public TransactionConfig newConfig() {
     return new TransactionConfig();
   }
 
   @Override
   public TransactionBuilder newBuilder(String name, TransactionConfig config, PrimitiveManagementService managementService) {
-    throw new UnsupportedOperationException();
+    return new DefaultTransactionBuilder(name, config, managementService, new CoreTransactionService(managementService));
   }
 
   @Override

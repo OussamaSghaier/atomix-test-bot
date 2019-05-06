@@ -19,7 +19,6 @@ import io.atomix.primitive.partition.MemberGroupStrategy;
 import io.atomix.primitive.partition.PartitionGroup;
 import io.atomix.primitive.partition.PartitionGroupConfig;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
@@ -27,12 +26,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
  */
 public class LogPartitionGroupConfig extends PartitionGroupConfig<LogPartitionGroupConfig> {
   private static final int DEFAULT_PARTITIONS = 7;
-  private static final int DEFAULT_REPLICATION_FACTOR = 2;
 
   private String memberGroupStrategy = MemberGroupStrategy.NODE_AWARE.name();
   private LogStorageConfig storageConfig = new LogStorageConfig();
   private LogCompactionConfig compactionConfig = new LogCompactionConfig();
-  private int replicationFactor = DEFAULT_REPLICATION_FACTOR;
 
   @Override
   public PartitionGroup.Type getType() {
@@ -101,27 +98,6 @@ public class LogPartitionGroupConfig extends PartitionGroupConfig<LogPartitionGr
    */
   public LogPartitionGroupConfig setCompactionConfig(LogCompactionConfig compactionConfig) {
     this.compactionConfig = checkNotNull(compactionConfig, "compactionConfig cannot be null");
-    return this;
-  }
-
-  /**
-   * Returns the replication factor.
-   *
-   * @return the replication factor
-   */
-  public int getReplicationFactor() {
-    return replicationFactor;
-  }
-
-  /**
-   * Sets the replication factor.
-   *
-   * @param replicationFactor the replication factor
-   * @return the partition group configuration
-   */
-  public LogPartitionGroupConfig setReplicationFactor(int replicationFactor) {
-    checkArgument(replicationFactor > 0, "replicationFactor must be positive");
-    this.replicationFactor = replicationFactor;
     return this;
   }
 }

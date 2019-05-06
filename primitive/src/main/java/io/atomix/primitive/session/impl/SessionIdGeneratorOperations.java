@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-present Open Networking Foundation
+ * Copyright 2016-present Open Networking Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,38 @@
  */
 package io.atomix.primitive.session.impl;
 
-import io.atomix.primitive.operation.CommandId;
-import io.atomix.primitive.session.impl.proto.NextRequest;
-import io.atomix.primitive.session.impl.proto.NextResponse;
+import io.atomix.primitive.operation.OperationId;
+import io.atomix.primitive.operation.OperationType;
+import io.atomix.utils.serializer.Namespace;
+import io.atomix.utils.serializer.Namespaces;
 
 /**
- * Session ID generator operations.
+ * ID generator operations.
+ * <p>
+ * WARNING: Do not refactor enum values. Only add to them.
+ * Changing values risk breaking the ability to backup/restore/upgrade clusters.
  */
-public final class SessionIdGeneratorOperations {
-  public static final CommandId<NextRequest, NextResponse> NEXT = new CommandId<>("next");
+public enum SessionIdGeneratorOperations implements OperationId {
+  NEXT(OperationType.COMMAND);
 
-  private SessionIdGeneratorOperations() {
+  private final OperationType type;
+
+  SessionIdGeneratorOperations(OperationType type) {
+    this.type = type;
   }
+
+  @Override
+  public String id() {
+    return name();
+  }
+
+  @Override
+  public OperationType type() {
+    return type;
+  }
+
+  public static final Namespace NAMESPACE = Namespace.builder()
+      .register(Namespaces.BASIC)
+      .nextId(Namespaces.BEGIN_USER_CUSTOM_ID)
+      .build(SessionIdGeneratorOperations.class.getSimpleName());
 }

@@ -16,13 +16,31 @@
 package io.atomix.primitive.log;
 
 import java.util.Collection;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
+import io.atomix.primitive.PrimitiveState;
 import io.atomix.primitive.partition.PartitionId;
+import io.atomix.primitive.protocol.LogProtocol;
 
 /**
  * Log client.
  */
 public interface LogClient {
+
+  /**
+   * Returns the client log protocol.
+   *
+   * @return the client log protocol
+   */
+  LogProtocol protocol();
+
+  /**
+   * Returns the log client state.
+   *
+   * @return the log client state
+   */
+  PrimitiveState state();
 
   /**
    * Returns the collection of all partitions.
@@ -37,14 +55,6 @@ public interface LogClient {
    * @return the collection of all partition IDs
    */
   Collection<PartitionId> getPartitionIds();
-
-  /**
-   * Returns the partition with the given identifier.
-   *
-   * @param partitionId the partition with the given identifier
-   * @return the partition with the given identifier
-   */
-  LogSession getPartition(int partitionId);
 
   /**
    * Returns the partition with the given identifier.
@@ -71,5 +81,33 @@ public interface LogClient {
   default LogSession getPartition(String key) {
     return getPartition(getPartitionId(key));
   }
+
+  /**
+   * Registers a session state change listener.
+   *
+   * @param listener The callback to call when the session state changes.
+   */
+  void addStateChangeListener(Consumer<PrimitiveState> listener);
+
+  /**
+   * Removes a state change listener.
+   *
+   * @param listener the state change listener to remove
+   */
+  void removeStateChangeListener(Consumer<PrimitiveState> listener);
+
+  /**
+   * Connects the log client.
+   *
+   * @return a future to be completed once the log client has been connected
+   */
+  CompletableFuture<LogClient> connect();
+
+  /**
+   * Closes the log client.
+   *
+   * @return a future to be completed once the log client has been closed
+   */
+  CompletableFuture<Void> close();
 
 }

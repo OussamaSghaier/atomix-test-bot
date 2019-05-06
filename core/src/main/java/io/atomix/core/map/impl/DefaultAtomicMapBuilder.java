@@ -15,21 +15,17 @@
  */
 package io.atomix.core.map.impl;
 
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-
-import com.google.common.collect.Maps;
 import com.google.common.io.BaseEncoding;
 import io.atomix.core.map.AsyncAtomicMap;
 import io.atomix.core.map.AtomicMap;
 import io.atomix.core.map.AtomicMapBuilder;
 import io.atomix.core.map.AtomicMapConfig;
-import io.atomix.primitive.ManagedAsyncPrimitive;
 import io.atomix.primitive.PrimitiveManagementService;
-import io.atomix.primitive.partition.PartitionId;
-import io.atomix.primitive.partition.Partitioner;
+import io.atomix.primitive.proxy.ProxyClient;
+import io.atomix.primitive.service.ServiceConfig;
 import io.atomix.utils.serializer.Serializer;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Default {@link AsyncAtomicMap} builder.
@@ -45,36 +41,29 @@ public class DefaultAtomicMapBuilder<K, V> extends AtomicMapBuilder<K, V> {
   @Override
   @SuppressWarnings("unchecked")
   public CompletableFuture<AtomicMap<K, V>> buildAsync() {
-    return managementService.getPrimitiveRegistry().createPrimitive(name, type)
-        .thenApply(v -> newMultitonProxies(MapService.TYPE, MapProxy::new))
-        .thenApply(proxies -> proxies.entrySet().stream()
-            .map(entry -> Maps.<PartitionId, AsyncAtomicMap<String, byte[]>>immutableEntry(
-                entry.getKey(),
-                new RawAsyncAtomicMap(entry.getValue(), config.getSessionTimeout(), managementService)))
-            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
-        .thenApply(partitions -> new PartitionedAsyncAtomicMap(name, type, partitions, Partitioner.MURMUR3))
-        .thenCompose(ManagedAsyncPrimitive::connect)
+    return newProxy(AtomicMapService.class, new ServiceConfig())
+        .thenCompose(proxy -> new AtomicMapProxy((ProxyClient) proxy, managementService.getPrimitiveRegistry()).connect())
         .thenApply(rawMap -> {
           Serializer serializer = serializer();
-          return new TranscodingAsyncAtomicMap<K, V, String, byte[]>(
+          AsyncAtomicMap<K, V> map = new TranscodingAsyncAtomicMap<>(
               rawMap,
               key -> BaseEncoding.base16().encode(serializer.encode(key)),
               string -> serializer.decode(BaseEncoding.base16().decode(string)),
               value -> serializer.encode(value),
               bytes -> serializer.decode(bytes));
-        })
-        .<AsyncAtomicMap<K, V>>thenApply(map -> {
+
+          if (!config.isNullValues()) {
+            map = new NotNullAsyncAtomicMap<>(map);
+          }
+
           if (config.getCacheConfig().isEnabled()) {
-            return new CachingAsyncAtomicMap<>(map, config.getCacheConfig());
+            map = new CachingAsyncAtomicMap<>(map, config.getCacheConfig());
           }
-          return map;
-        })
-        .thenApply(map -> {
+
           if (config.isReadOnly()) {
-            return new UnmodifiableAsyncAtomicMap<>(map);
+            map = new UnmodifiableAsyncAtomicMap<>(map);
           }
-          return map;
-        })
-        .thenApply(AsyncAtomicMap::sync);
+          return map.sync();
+        });
   }
 }

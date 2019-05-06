@@ -15,6 +15,13 @@
  */
 package io.atomix.core.map;
 
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import io.atomix.core.AbstractPrimitiveTest;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
+import org.junit.Test;
+
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -23,12 +30,6 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import io.atomix.core.AbstractPrimitiveTest;
-import org.apache.commons.lang3.tuple.Pair;
-import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -40,6 +41,31 @@ import static org.junit.Assert.assertTrue;
  * Unit tests for {@link DistributedMap}.
  */
 public class DistributedMapTest extends AbstractPrimitiveTest {
+
+  /**
+   * Tests null values.
+   */
+  @Test
+  public void testNullValues() throws Throwable {
+    final String fooValue = "Hello foo!";
+    final String barValue = "Hello bar!";
+
+    DistributedMap<String, String> map = atomix()
+        .<String, String>mapBuilder("testNullValues")
+        .withProtocol(protocol())
+        .withNullValues()
+        .build();
+
+    assertNull(map.get("foo"));
+    assertNull(map.put("foo", null));
+    assertNull(map.put("foo", fooValue));
+    assertEquals(fooValue, map.get("foo"));
+    assertTrue(map.replace("foo", fooValue, null));
+    assertNull(map.get("foo"));
+    assertFalse(map.replace("foo", fooValue, barValue));
+    assertTrue(map.replace("foo", null, barValue));
+    assertEquals(barValue, map.get("foo"));
+  }
 
   @Test
   public void testBasicMapOperations() throws Throwable {
@@ -252,6 +278,24 @@ public class DistributedMapTest extends AbstractPrimitiveTest {
     DistributedMap<Key, Pair<String, Integer>> map = atomix()
         .<Key, Pair<String, Integer>>mapBuilder("testComplexTypes")
         .withProtocol(protocol())
+        .build();
+
+    map.put(new Key("foo"), Pair.of("foo", 1));
+    assertEquals("foo", map.get(new Key("foo")).getLeft());
+    assertEquals(Integer.valueOf(1), map.get(new Key("foo")).getRight());
+  }
+
+  /**
+   * Tests a map with complex types.
+   */
+  @Test
+  public void testRequiredComplexTypes() throws Throwable {
+    DistributedMap<Key, Pair<String, Integer>> map = atomix()
+        .<Key, Pair<String, Integer>>mapBuilder("testComplexTypes")
+        .withProtocol(protocol())
+        .withRegistrationRequired()
+        .withKeyType(Key.class)
+        .withValueType(ImmutablePair.class)
         .build();
 
     map.put(new Key("foo"), Pair.of("foo", 1));

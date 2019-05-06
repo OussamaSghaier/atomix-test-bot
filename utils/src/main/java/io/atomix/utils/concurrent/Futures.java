@@ -23,7 +23,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BinaryOperator;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -38,7 +37,7 @@ public final class Futures {
    * Gets a future result with a default timeout.
    *
    * @param future the future to block
-   * @param <T>    the future result type
+   * @param <T> the future result type
    * @return the future result
    * @throws RuntimeException if a future exception occurs
    */
@@ -49,10 +48,10 @@ public final class Futures {
   /**
    * Gets a future result with a default timeout.
    *
-   * @param future   the future to block
-   * @param timeout  the future timeout
+   * @param future the future to block
+   * @param timeout the future timeout
    * @param timeUnit the future timeout time unit
-   * @param <T>      the future result type
+   * @param <T> the future result type
    * @return the future result
    * @throws RuntimeException if a future exception occurs
    */
@@ -165,28 +164,6 @@ public final class Futures {
   }
 
   /**
-   * Transforms exceptions on the given future using the given function.
-   *
-   * @param future   the future to transform
-   * @param function the function with which to transform exceptions
-   * @param <T>      the future type
-   * @return the transformed future
-   */
-  public static <T> CompletableFuture<T> transformExceptions(
-      CompletableFuture<T> future,
-      Function<Throwable, Throwable> function) {
-    CompletableFuture<T> newFuture = new CompletableFuture<>();
-    future.whenComplete((result, error) -> {
-      if (error == null) {
-        newFuture.complete(result);
-      } else {
-        newFuture.completeExceptionally(function.apply(error));
-      }
-    });
-    return newFuture;
-  }
-
-  /**
    * Returns a new CompletableFuture completed with a list of computed values
    * when all of the given CompletableFuture complete.
    *
@@ -231,39 +208,4 @@ public final class Futures {
     return allOf(futures).thenApply(resultList -> resultList.stream().reduce(reducer).orElse(emptyValue));
   }
 
-  @FunctionalInterface
-  public interface CheckedFunction<T, U> {
-    U apply(T t) throws Exception;
-  }
-
-  /**
-   * Converts the given checked function to an unchecked function.
-   *
-   * @param function the function to uncheck
-   * @param <T>      the function argument
-   * @param <U>      the function return type
-   * @return an unchecked function
-   */
-  public static <T, U> Function<T, U> uncheck(CheckedFunction<T, U> function) {
-    return uncheck(function, RuntimeException::new);
-  }
-
-  /**
-   * Converts the given checked function to an unchecked function.
-   *
-   * @param function         the function to uncheck
-   * @param exceptionFactory the exception factory to use to construct an unchecked exception
-   * @param <T>              the function argument
-   * @param <U>              the function return type
-   * @return an unchecked function
-   */
-  public static <T, U> Function<T, U> uncheck(CheckedFunction<T, U> function, Function<Exception, RuntimeException> exceptionFactory) {
-    return t -> {
-      try {
-        return function.apply(t);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    };
-  }
 }
