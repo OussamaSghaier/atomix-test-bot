@@ -15,9 +15,9 @@
  */
 package io.atomix.primitive.partition;
 
-import io.atomix.primitive.PrimitiveType;
-import io.atomix.primitive.session.SessionClient;
-import io.atomix.primitive.service.ServiceConfig;
+import java.util.concurrent.CompletableFuture;
+
+import io.atomix.utils.stream.StreamHandler;
 
 /**
  * Primitive client.
@@ -25,13 +25,35 @@ import io.atomix.primitive.service.ServiceConfig;
 public interface PartitionClient {
 
   /**
-   * Returns a new session builder for the given primitive type.
+   * Sends a command to the partition.
    *
-   * @param primitiveName the proxy name
-   * @param primitiveType the type for which to return a new proxy builder
-   * @param serviceConfig the primitive service configuration
-   * @return a new proxy builder for the given primitive type
+   * @param value the command to send
+   * @return a future to be completed with the result
    */
-  SessionClient.Builder sessionBuilder(String primitiveName, PrimitiveType primitiveType, ServiceConfig serviceConfig);
+  CompletableFuture<byte[]> command(byte[] value);
+
+  /**
+   * Sends a command to the partition.
+   *
+   * @param value the command to send
+   * @return a future to be completed with the result
+   */
+  CompletableFuture<Void> command(byte[] value, StreamHandler<byte[]> handler);
+
+  /**
+   * Sets a query to the partition.
+   *
+   * @param value the query parameter
+   * @return a future to be completed with the result
+   */
+  CompletableFuture<byte[]> query(byte[] value);
+
+  /**
+   * Sets a query to the partition.
+   *
+   * @param value the query parameter
+   * @return a future to be completed with the result
+   */
+  CompletableFuture<Void> query(byte[] value, StreamHandler<byte[]> handler);
 
 }

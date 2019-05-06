@@ -16,28 +16,15 @@
 package io.atomix.primitive;
 
 import io.atomix.primitive.config.PrimitiveConfig;
+import io.atomix.primitive.partition.PartitionId;
+import io.atomix.primitive.partition.PartitionManagementService;
 import io.atomix.primitive.service.PrimitiveService;
-import io.atomix.primitive.service.ServiceConfig;
 import io.atomix.utils.ConfiguredType;
-import io.atomix.utils.serializer.Namespace;
-import io.atomix.utils.serializer.Namespaces;
 
 /**
  * Primitive type.
  */
 public interface PrimitiveType<B extends PrimitiveBuilder, C extends PrimitiveConfig, P extends SyncPrimitive> extends ConfiguredType<C> {
-
-  /**
-   * Returns the primitive type namespace.
-   *
-   * @return the primitive type namespace
-   */
-  default Namespace namespace() {
-    return Namespace.builder()
-        .register(Namespaces.BASIC)
-        .register(ServiceConfig.class)
-        .build();
-  }
 
   /**
    * Returns a new instance of the primitive configuration.
@@ -57,11 +44,4 @@ public interface PrimitiveType<B extends PrimitiveBuilder, C extends PrimitiveCo
    */
   B newBuilder(String primitiveName, C config, PrimitiveManagementService managementService);
 
-  /**
-   * Creates a new service instance from the given configuration.
-   *
-   * @param config the service configuration
-   * @return the service instance
-   */
-  PrimitiveService newService(ServiceConfig config);
 }

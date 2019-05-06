@@ -15,19 +15,19 @@
  */
 package io.atomix.protocols.log.partition.impl;
 
-import io.atomix.primitive.partition.PartitionManagementService;
-import io.atomix.protocols.log.DistributedLogServer;
-import io.atomix.protocols.log.partition.LogPartition;
-import io.atomix.protocols.log.partition.LogPartitionGroupConfig;
-import io.atomix.protocols.log.serializer.impl.LogNamespaces;
-import io.atomix.utils.Managed;
-import io.atomix.utils.concurrent.ThreadContextFactory;
-import io.atomix.utils.serializer.Serializer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import io.atomix.log.DistributedLogServer;
+import io.atomix.primitive.partition.GroupMember;
+import io.atomix.primitive.partition.MemberGroup;
+import io.atomix.primitive.partition.PartitionManagementService;
+import io.atomix.protocols.log.partition.LogPartition;
+import io.atomix.protocols.log.partition.LogPartitionGroupConfig;
+import io.atomix.utils.Managed;
+import io.atomix.utils.concurrent.ThreadContextFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Primary-backup partition server.
@@ -70,15 +70,24 @@ public class LogPartitionServer implements Managed<LogPartitionServer> {
   }
 
   private DistributedLogServer buildServer() {
+    MemberGroup memberGroup = config.getMemberGroupProvider()
+        .getMemberGroups(managementService.getMembershipService().getMembers())
+        .stream()
+        .filter(group -> group.isMember(managementService.getMembershipService().getLocalMember()))
+        .findAny()
+        .orElse(null);
     return DistributedLogServer.builder()
-        .withServerName(partition.name())
-        .withMembershipService(managementService.getMembershipService())
-        .withMemberGroupProvider(config.getMemberGroupProvider())
+        .withServerId(managementService.getMembershipService().getLocalMember().id().id())
         .withProtocol(new LogServerCommunicator(
             partition.name(),
-            Serializer.using(LogNamespaces.PROTOCOL),
             managementService.getMessagingService()))
-        .withPrimaryElection(managementService.getElectionService().getElectionFor(partition.id()))
+        .withTermProvider(new LogPartitionTermProvider(
+            managementService.getElectionService().getElectionFor(partition.id()),
+            GroupMember.newBuilder()
+                .setMemberId(managementService.getMembershipService().getLocalMember().id().id())
+                .setMemberGroupId(memberGroup.id().id())
+                .build(),
+            config.getReplicationFactor()))
         .withStorageLevel(config.getStorageConfig().getLevel())
         .withDirectory(config.getStorageConfig().getDirectory(partition.name()))
         .withMaxSegmentSize((int) config.getStorageConfig().getSegmentSize().bytes())

@@ -15,28 +15,9 @@
  */
 package io.atomix.core.test.protocol;
 
-import io.atomix.primitive.PrimitiveType;
-import io.atomix.primitive.partition.PartitionId;
-import io.atomix.primitive.partition.PartitionService;
 import io.atomix.primitive.protocol.PrimitiveProtocol;
 import io.atomix.primitive.protocol.ProxyProtocol;
-import io.atomix.primitive.proxy.ProxyClient;
-import io.atomix.primitive.proxy.impl.DefaultProxyClient;
-import io.atomix.primitive.service.ServiceConfig;
-import io.atomix.primitive.session.SessionClient;
-import io.atomix.primitive.session.SessionId;
-import io.atomix.utils.concurrent.ThreadPoolContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.Collection;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-
-import static io.atomix.utils.concurrent.Threads.namedThreads;
+import io.atomix.utils.component.Component;
 
 /**
  * Test primitive protocol.
@@ -47,15 +28,17 @@ public class TestProtocol implements ProxyProtocol {
   /**
    * Returns a new test protocol builder.
    *
+   * @param group the partition group
    * @return a new test protocol builder
    */
-  public static TestProtocolBuilder builder() {
-    return new TestProtocolBuilder(new TestProtocolConfig());
+  public static TestProtocolBuilder builder(String group) {
+    return new TestProtocolBuilder(new TestProtocolConfig().setGroup(group));
   }
 
   /**
    * Multi-Raft protocol type.
    */
+  @Component(scope = Component.Scope.TEST)
   public static final class Type implements PrimitiveProtocol.Type<TestProtocolConfig> {
     private static final String NAME = "multi-raft";
 
@@ -75,17 +58,10 @@ public class TestProtocol implements ProxyProtocol {
     }
   }
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(TestProtocol.class);
-
-  private final ScheduledExecutorService threadPool = Executors.newScheduledThreadPool(
-      4, namedThreads("test-protocol-service-%d", LOGGER));
   private final TestProtocolConfig config;
-  private final TestProtocolServiceRegistry registry;
-  private final AtomicLong sessionIds = new AtomicLong();
 
   TestProtocol(TestProtocolConfig config) {
     this.config = config;
-    this.registry = new TestProtocolServiceRegistry(threadPool);
   }
 
   @Override
@@ -96,44 +72,5 @@ public class TestProtocol implements ProxyProtocol {
   @Override
   public String group() {
     return config.getGroup();
-  }
-
-  @Override
-  public <S> ProxyClient<S> newProxy(
-      String primitiveName,
-      PrimitiveType primitiveType,
-      Class<S> serviceType,
-      ServiceConfig serviceConfig,
-      PartitionService partitionService) {
-    Collection<SessionClient> partitions = IntStream.range(0, config.getPartitions())
-        .mapToObj(partition -> {
-          SessionId sessionId = SessionId.from(sessionIds.incrementAndGet());
-          return new TestSessionClient(
-              primitiveName,
-              primitiveType,
-              sessionId,
-              PartitionId.from(group(), partition),
-              new ThreadPoolContext(threadPool),
-              registry.getOrCreateService(
-                  PartitionId.from(group(), partition),
-                  primitiveName,
-                  primitiveType,
-                  serviceConfig));
-        })
-        .collect(Collectors.toList());
-    return new DefaultProxyClient<>(
-        primitiveName,
-        primitiveType,
-        this,
-        serviceType,
-        partitions,
-        config.getPartitioner());
-  }
-
-  /**
-   * Closes the protocol.
-   */
-  public void close() {
-    threadPool.shutdownNow();
   }
 }

@@ -15,20 +15,19 @@
  */
 package io.atomix.protocols.log;
 
-import io.atomix.primitive.PrimitiveType;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import com.google.common.collect.Maps;
 import io.atomix.primitive.log.LogClient;
 import io.atomix.primitive.log.LogSession;
+import io.atomix.primitive.partition.PartitionId;
 import io.atomix.primitive.partition.PartitionService;
 import io.atomix.primitive.protocol.LogProtocol;
 import io.atomix.primitive.protocol.PrimitiveProtocol;
-import io.atomix.primitive.proxy.ProxyClient;
-import io.atomix.primitive.proxy.impl.LogProxyClient;
-import io.atomix.primitive.service.ServiceConfig;
 import io.atomix.protocols.log.impl.DistributedLogClient;
 import io.atomix.protocols.log.partition.LogPartition;
-
-import java.util.Collection;
-import java.util.stream.Collectors;
+import io.atomix.utils.component.Component;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -69,6 +68,7 @@ public class DistributedLogProtocol implements LogProtocol {
   /**
    * Log protocol type.
    */
+  @Component
   public static final class Type implements PrimitiveProtocol.Type<DistributedLogProtocolConfig> {
     private static final String NAME = "multi-log";
 
@@ -106,21 +106,11 @@ public class DistributedLogProtocol implements LogProtocol {
 
   @Override
   public LogClient newClient(PartitionService partitionService) {
-    Collection<LogSession> partitions = partitionService.getPartitionGroup(this)
+    Map<PartitionId, LogSession> partitions = partitionService.getPartitionGroup(this)
         .getPartitions()
         .stream()
-        .map(partition -> ((LogPartition) partition).getClient().logSessionBuilder().build())
-        .collect(Collectors.toList());
-    return new DistributedLogClient(this, partitions, config.getPartitioner());
-  }
-
-  @Override
-  public <S> ProxyClient<S> newProxy(
-      String primitiveName,
-      PrimitiveType primitiveType,
-      Class<S> serviceType,
-      ServiceConfig serviceConfig,
-      PartitionService partitionService) {
-    return new LogProxyClient<S>(primitiveName, primitiveType, this, serviceType, serviceConfig, newClient(partitionService));
+        .map(partition -> Maps.immutableEntry(partition.id(), ((LogPartition) partition).getSession()))
+        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    return new DistributedLogClient(partitions, config.getPartitioner());
   }
 }

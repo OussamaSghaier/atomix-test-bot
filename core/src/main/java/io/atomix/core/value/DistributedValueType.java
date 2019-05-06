@@ -16,17 +16,16 @@
 package io.atomix.core.value;
 
 import io.atomix.core.value.impl.DefaultDistributedValueBuilder;
-import io.atomix.core.value.impl.DefaultDistributedValueService;
 import io.atomix.primitive.PrimitiveManagementService;
 import io.atomix.primitive.PrimitiveType;
-import io.atomix.primitive.service.PrimitiveService;
-import io.atomix.primitive.service.ServiceConfig;
+import io.atomix.utils.component.Component;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 
 /**
  * Distributed value primitive type.
  */
+@Component
 public class DistributedValueType<V> implements PrimitiveType<DistributedValueBuilder<V>, DistributedValueConfig, DistributedValue<V>> {
   private static final String NAME = "value";
   private static final DistributedValueType INSTANCE = new DistributedValueType();
@@ -45,11 +44,6 @@ public class DistributedValueType<V> implements PrimitiveType<DistributedValueBu
   @Override
   public String name() {
     return NAME;
-  }
-
-  @Override
-  public PrimitiveService newService(ServiceConfig config) {
-    return new DefaultDistributedValueService();
   }
 
   @Override

@@ -15,23 +15,23 @@
  */
 package io.atomix.protocols.raft.partition;
 
-import io.atomix.cluster.MemberId;
-import io.atomix.primitive.partition.Partition;
-import io.atomix.primitive.partition.PartitionId;
-import io.atomix.primitive.partition.PartitionManagementService;
-import io.atomix.primitive.partition.PartitionMetadata;
-import io.atomix.protocols.raft.partition.impl.RaftClientCommunicator;
-import io.atomix.protocols.raft.partition.impl.RaftNamespaces;
-import io.atomix.protocols.raft.partition.impl.RaftPartitionClient;
-import io.atomix.protocols.raft.partition.impl.RaftPartitionServer;
-import io.atomix.utils.concurrent.ThreadContextFactory;
-import io.atomix.utils.serializer.Serializer;
-
 import java.io.File;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+
+import io.atomix.cluster.MemberId;
+import io.atomix.primitive.partition.Partition;
+import io.atomix.primitive.partition.PartitionClient;
+import io.atomix.primitive.partition.PartitionId;
+import io.atomix.primitive.partition.PartitionManagementService;
+import io.atomix.primitive.partition.PartitionMetadata;
+import io.atomix.primitive.service.impl.ServiceManagerStateMachine;
+import io.atomix.protocols.raft.partition.impl.RaftClientCommunicator;
+import io.atomix.protocols.raft.partition.impl.RaftPartitionClient;
+import io.atomix.protocols.raft.partition.impl.RaftPartitionServer;
+import io.atomix.utils.concurrent.ThreadContextFactory;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 
@@ -69,7 +69,7 @@ public class RaftPartition implements Partition {
    * @return the partition name
    */
   public String name() {
-    return String.format("%s-partition-%d", partitionId.group(), partitionId.id());
+    return String.format("%s-partition-%d", partitionId.getGroup(), partitionId.getPartition());
   }
 
   @Override
@@ -121,7 +121,7 @@ public class RaftPartition implements Partition {
   }
 
   @Override
-  public RaftPartitionClient getClient() {
+  public PartitionClient getClient() {
     return client;
   }
 
@@ -133,25 +133,12 @@ public class RaftPartition implements Partition {
     this.client = createClient(managementService);
     if (partition.members().contains(managementService.getMembershipService().getLocalMember().id())) {
       server = createServer(managementService);
-      return server.start()
+      return server.start(new ServiceManagerStateMachine(metadata.id(), managementService))
           .thenCompose(v -> client.start())
           .thenApply(v -> null);
     }
     return client.start()
         .thenApply(v -> this);
-  }
-
-  /**
-   * Updates the partition with the given metadata.
-   */
-  CompletableFuture<Void> update(PartitionMetadata metadata, PartitionManagementService managementService) {
-    if (server == null && metadata.members().contains(managementService.getMembershipService().getLocalMember().id())) {
-      server = createServer(managementService);
-      return server.join(metadata.members());
-    } else if (server != null && !metadata.members().contains(managementService.getMembershipService().getLocalMember().id())) {
-      return server.leave().thenRun(() -> server = null);
-    }
-    return CompletableFuture.completedFuture(null);
   }
 
   /**
@@ -186,9 +173,8 @@ public class RaftPartition implements Partition {
         this,
         config,
         managementService.getMembershipService().getLocalMember().id(),
-        managementService.getMembershipService(),
         managementService.getMessagingService(),
-        managementService.getPrimitiveTypes(),
+        managementService.getStreamingService(),
         threadContextFactory);
   }
 
@@ -198,11 +184,10 @@ public class RaftPartition implements Partition {
   private RaftPartitionClient createClient(PartitionManagementService managementService) {
     return new RaftPartitionClient(
         this,
-        managementService.getMembershipService().getLocalMember().id(),
         new RaftClientCommunicator(
             name(),
-            Serializer.using(RaftNamespaces.RAFT_PROTOCOL),
-            managementService.getMessagingService()),
+            managementService.getMessagingService(),
+            managementService.getStreamingService()),
         threadContextFactory);
   }
 

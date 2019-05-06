@@ -15,6 +15,15 @@
  */
 package io.atomix.protocols.log.partition;
 
+import java.io.File;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import io.atomix.primitive.Recovery;
@@ -28,23 +37,18 @@ import io.atomix.primitive.partition.PartitionManagementService;
 import io.atomix.primitive.protocol.PrimitiveProtocol;
 import io.atomix.primitive.protocol.ProxyProtocol;
 import io.atomix.protocols.log.DistributedLogProtocol;
+import io.atomix.protocols.log.impl.DistributedLogClient;
 import io.atomix.storage.StorageLevel;
+import io.atomix.utils.component.Component;
 import io.atomix.utils.concurrent.BlockingAwareThreadPoolContextFactory;
 import io.atomix.utils.concurrent.ThreadContextFactory;
+import io.atomix.utils.logging.ContextualLoggerFactory;
+import io.atomix.utils.logging.LoggerContext;
 import io.atomix.utils.memory.MemorySize;
 import io.atomix.utils.serializer.Namespace;
 import io.atomix.utils.serializer.Namespaces;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.File;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -68,6 +72,7 @@ public class LogPartitionGroup implements ManagedPartitionGroup {
   /**
    * Log partition group type.
    */
+  @Component
   public static class Type implements PartitionGroup.Type<LogPartitionGroupConfig> {
     private static final String NAME = "log";
 
@@ -99,10 +104,15 @@ public class LogPartitionGroup implements ManagedPartitionGroup {
     }
   }
 
-  private static Collection<LogPartition> buildPartitions(LogPartitionGroupConfig config) {
+  private static Collection<LogPartition> buildPartitions(
+      LogPartitionGroupConfig config,
+      ThreadContextFactory threadContextFactory) {
     List<LogPartition> partitions = new ArrayList<>(config.getPartitions());
     for (int i = 0; i < config.getPartitions(); i++) {
-      partitions.add(new LogPartition(PartitionId.from(config.getName(), i + 1), config));
+      partitions.add(new LogPartition(PartitionId.newBuilder()
+          .setGroup(config.getName())
+          .setPartition(i + 1)
+          .build(), config, threadContextFactory));
     }
     return partitions;
   }
@@ -114,12 +124,18 @@ public class LogPartitionGroup implements ManagedPartitionGroup {
   private final Map<PartitionId, LogPartition> partitions = Maps.newConcurrentMap();
   private final List<LogPartition> sortedPartitions = Lists.newCopyOnWriteArrayList();
   private final List<PartitionId> sortedPartitionIds = Lists.newCopyOnWriteArrayList();
-  private ThreadContextFactory threadFactory;
+  private final ThreadContextFactory threadContextFactory;
 
   public LogPartitionGroup(LogPartitionGroupConfig config) {
+    Logger log = ContextualLoggerFactory.getLogger(DistributedLogClient.class, LoggerContext.builder(DistributedLogClient.class)
+        .addValue(config.getName())
+        .build());
     this.config = config;
     this.name = checkNotNull(config.getName());
-    buildPartitions(config).forEach(p -> {
+    int threadPoolSize = Math.max(Math.min(Runtime.getRuntime().availableProcessors() * 2, 16), 4);
+    this.threadContextFactory = new BlockingAwareThreadPoolContextFactory(
+        "raft-partition-group-" + name + "-%d", threadPoolSize, log);
+    buildPartitions(config, threadContextFactory).forEach(p -> {
       this.partitions.put(p.id(), p);
       this.sortedPartitions.add(p);
       this.sortedPartitionIds.add(p.id());
@@ -171,10 +187,8 @@ public class LogPartitionGroup implements ManagedPartitionGroup {
 
   @Override
   public CompletableFuture<ManagedPartitionGroup> join(PartitionManagementService managementService) {
-    int threadPoolSize = Math.max(Math.min(Runtime.getRuntime().availableProcessors() * 2, 32), 4);
-    threadFactory = new BlockingAwareThreadPoolContextFactory("atomix-" + name() + "-%d", threadPoolSize, LOGGER);
     List<CompletableFuture<Partition>> futures = partitions.values().stream()
-        .map(p -> p.join(managementService, threadFactory))
+        .map(p -> p.join(managementService))
         .collect(Collectors.toList());
     return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).thenApply(v -> {
       LOGGER.info("Started");
@@ -184,10 +198,8 @@ public class LogPartitionGroup implements ManagedPartitionGroup {
 
   @Override
   public CompletableFuture<ManagedPartitionGroup> connect(PartitionManagementService managementService) {
-    int threadPoolSize = Math.max(Math.min(Runtime.getRuntime().availableProcessors() * 2, 32), 4);
-    threadFactory = new BlockingAwareThreadPoolContextFactory("atomix-" + name() + "-%d", threadPoolSize, LOGGER);
     List<CompletableFuture<Partition>> futures = partitions.values().stream()
-        .map(p -> p.connect(managementService, threadFactory))
+        .map(p -> p.connect(managementService))
         .collect(Collectors.toList());
     return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).thenApply(v -> {
       LOGGER.info("Started");
@@ -202,10 +214,7 @@ public class LogPartitionGroup implements ManagedPartitionGroup {
         .collect(Collectors.toList());
     // Shutdown ThreadContextFactory on FJP common thread
     return CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()])).whenCompleteAsync((r, e) -> {
-      ThreadContextFactory threadFactory = this.threadFactory;
-      if (threadFactory != null) {
-        threadFactory.close();
-      }
+      threadContextFactory.close();
       LOGGER.info("Stopped");
     });
   }

@@ -16,11 +16,9 @@
 package io.atomix.primitive.partition.impl;
 
 import io.atomix.primitive.PrimitiveBuilder;
-import io.atomix.primitive.config.PrimitiveConfig;
 import io.atomix.primitive.PrimitiveManagementService;
 import io.atomix.primitive.PrimitiveType;
-import io.atomix.primitive.service.PrimitiveService;
-import io.atomix.primitive.service.ServiceConfig;
+import io.atomix.primitive.config.PrimitiveConfig;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 
@@ -43,11 +41,6 @@ public class PrimaryElectorType implements PrimitiveType {
   @Override
   public String name() {
     return NAME;
-  }
-
-  @Override
-  public PrimitiveService newService(ServiceConfig config) {
-    return new PrimaryElectorService();
   }
 
   @Override
