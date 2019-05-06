@@ -15,21 +15,12 @@
  */
 package io.atomix.cluster.messaging.impl;
 
-import java.net.InetSocketAddress;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.function.BiConsumer;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import io.atomix.cluster.ClusterConfig;
 import io.atomix.cluster.impl.AddressSerializer;
+import io.atomix.cluster.messaging.ManagedUnicastService;
 import io.atomix.cluster.messaging.MessagingConfig;
 import io.atomix.cluster.messaging.UnicastService;
-import io.atomix.utils.component.Component;
-import io.atomix.utils.component.Managed;
 import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Namespace;
 import io.atomix.utils.serializer.Namespaces;
@@ -49,13 +40,20 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetSocketAddress;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
+
 import static io.atomix.utils.concurrent.Threads.namedThreads;
 
 /**
  * Netty unicast service.
  */
-@Component(ClusterConfig.class)
-public class NettyUnicastService implements UnicastService, Managed<ClusterConfig> {
+public class NettyUnicastService implements ManagedUnicastService {
   private static final Serializer SERIALIZER = Serializer.using(Namespace.builder()
       .register(Namespaces.BASIC)
       .nextId(Namespaces.BEGIN_USER_CUSTOM_ID)
@@ -65,12 +63,18 @@ public class NettyUnicastService implements UnicastService, Managed<ClusterConfi
 
   private final Logger log = LoggerFactory.getLogger(getClass());
 
-  private Address address;
-  private MessagingConfig config;
+  private final Address address;
+  private final MessagingConfig config;
   private EventLoopGroup group;
   private DatagramChannel channel;
 
   private final Map<String, Map<BiConsumer<Address, byte[]>, Executor>> listeners = Maps.newConcurrentMap();
+  private final AtomicBoolean started = new AtomicBoolean();
+
+  public NettyUnicastService(Address address, MessagingConfig config) {
+    this.address = address;
+    this.config = config;
+  }
 
   @Override
   public void unicast(Address address, String subject, byte[] payload) {
@@ -165,11 +169,16 @@ public class NettyUnicastService implements UnicastService, Managed<ClusterConfi
   }
 
   @Override
-  public CompletableFuture<Void> start(ClusterConfig config) {
-    this.address = config.getNodeConfig().getAddress();
-    this.config = config.getMessagingConfig();
+  public CompletableFuture<UnicastService> start() {
     group = new NioEventLoopGroup(0, namedThreads("netty-unicast-event-nio-client-%d", log));
-    return bootstrap();
+    return bootstrap()
+        .thenRun(() -> started.set(true))
+        .thenApply(v -> this);
+  }
+
+  @Override
+  public boolean isRunning() {
+    return started.get();
   }
 
   @Override
@@ -177,11 +186,13 @@ public class NettyUnicastService implements UnicastService, Managed<ClusterConfi
     if (channel != null) {
       CompletableFuture<Void> future = new CompletableFuture<>();
       channel.close().addListener(f -> {
+        started.set(false);
         group.shutdownGracefully();
         future.complete(null);
       });
       return future;
     }
+    started.set(false);
     return CompletableFuture.completedFuture(null);
   }
 

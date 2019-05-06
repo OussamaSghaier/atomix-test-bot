@@ -15,7 +15,6 @@
  */
 package io.atomix.core.value;
 
-import io.atomix.primitive.PrimitiveType;
 import io.atomix.primitive.SyncPrimitive;
 
 /**
@@ -24,10 +23,6 @@ import io.atomix.primitive.SyncPrimitive;
  * @param <V> value type
  */
 public interface DistributedValue<V> extends SyncPrimitive {
-  @Override
-  default PrimitiveType type() {
-    return DistributedValueType.instance();
-  }
 
   /**
    * Gets the current value.

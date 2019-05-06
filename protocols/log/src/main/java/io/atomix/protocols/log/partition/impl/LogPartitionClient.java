@@ -1,163 +1,101 @@
+/*
+ * Copyright 2017-present Open Networking Foundation
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package io.atomix.protocols.log.partition.impl;
 
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-
-import io.atomix.primitive.log.LogRecord;
+import io.atomix.primitive.PrimitiveType;
 import io.atomix.primitive.log.LogSession;
-import io.atomix.primitive.operation.OperationType;
 import io.atomix.primitive.partition.PartitionClient;
-import io.atomix.primitive.service.Command;
-import io.atomix.primitive.service.Query;
-import io.atomix.primitive.service.StateMachine;
-import io.atomix.utils.concurrent.ThreadContext;
-import io.atomix.utils.stream.StreamHandler;
+import io.atomix.primitive.partition.PartitionManagementService;
+import io.atomix.primitive.service.ServiceConfig;
+import io.atomix.primitive.session.SessionClient;
+import io.atomix.protocols.log.DistributedLogSessionClient;
+import io.atomix.protocols.log.partition.LogPartition;
+import io.atomix.protocols.log.serializer.impl.LogNamespaces;
+import io.atomix.utils.Managed;
+import io.atomix.utils.concurrent.ThreadContextFactory;
+import io.atomix.utils.serializer.Serializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.CompletableFuture;
+
 /**
- * Distributed log session client.
+ * Primary-backup partition client.
  */
-public class LogPartitionClient implements PartitionClient {
-  private static final Logger LOGGER = LoggerFactory.getLogger(LogPartitionClient.class);
-  private final LogSession client;
-  private final StateMachine stateMachine;
-  private final ThreadContext stateContext;
-  private final ThreadContext threadContext;
-  private final Map<Long, StreamHandler<byte[]>> streams = new ConcurrentHashMap<>();
-  private final Map<Long, CompletableFuture> futures = new ConcurrentHashMap<>();
-  private final AtomicLong currentIndex = new AtomicLong();
-  private final AtomicLong currentTimestamp = new AtomicLong();
-  private volatile OperationType currentOperationType;
+public class LogPartitionClient implements PartitionClient, Managed<LogPartitionClient> {
+  private final Logger log = LoggerFactory.getLogger(getClass());
+  private final LogPartition partition;
+  private final PartitionManagementService managementService;
+  private final ThreadContextFactory threadFactory;
+  private volatile DistributedLogSessionClient client;
 
   public LogPartitionClient(
-      LogSession client,
-      StateMachine stateMachine,
-      ThreadContext stateContext,
-      ThreadContext threadContext) {
-    this.client = client;
-    this.stateMachine = stateMachine;
-    this.stateContext = stateContext;
-    this.threadContext = threadContext;
-    stateContext.execute(() -> stateMachine.init(new Context()));
-    client.consumer().consume(record -> stateContext.execute(() -> consume(record)));
-  }
-
-  @Override
-  public CompletableFuture<byte[]> command(byte[] value) {
-    CompletableFuture<byte[]> future = new CompletableFuture<>();
-    client.producer().append(value).thenAccept(index -> futures.put(index, future));
-    return future;
-  }
-
-  @Override
-  public CompletableFuture<Void> command(byte[] value, StreamHandler<byte[]> handler) {
-    return client.producer().append(value)
-        .thenAccept(index -> streams.put(index, handler));
-  }
-
-  @Override
-  public CompletableFuture<byte[]> query(byte[] value) {
-    CompletableFuture<byte[]> future = new CompletableFuture<>();
-    stateContext.execute(() -> {
-      currentOperationType = OperationType.QUERY;
-      stateMachine.apply(new Query<>(currentIndex.get(), currentTimestamp.get(), value))
-          .whenComplete((result, error) -> {
-            threadContext.execute(() -> {
-              if (error == null) {
-                future.complete(result);
-              } else {
-                future.completeExceptionally(error);
-              }
-            });
-          });
-    });
-    return future;
-  }
-
-  @Override
-  public CompletableFuture<Void> query(byte[] value, StreamHandler<byte[]> handler) {
-    CompletableFuture<Void> future = new CompletableFuture<>();
-    stateContext.execute(() -> {
-      currentOperationType = OperationType.QUERY;
-      stateMachine.apply(new Query<>(currentIndex.get(), currentTimestamp.get(), value), handler)
-          .whenComplete((result, error) -> {
-            if (error == null) {
-              future.complete(result);
-            } else {
-              future.completeExceptionally(error);
-            }
-          });
-    });
-    return future;
+      LogPartition partition,
+      PartitionManagementService managementService,
+      ThreadContextFactory threadFactory) {
+    this.partition = partition;
+    this.managementService = managementService;
+    this.threadFactory = threadFactory;
   }
 
   /**
-   * Consumes a record from the log.
+   * Returns a new log session builder.
    *
-   * @param record the record to consume
+   * @return a new log session builder
    */
-  @SuppressWarnings("unchecked")
-  private void consume(LogRecord record) {
-    currentIndex.set(record.getIndex());
-    long timestamp = currentTimestamp.accumulateAndGet(record.getTimestamp(), Math::max);
-    currentOperationType = OperationType.COMMAND;
-    StreamHandler<byte[]> stream = streams.get(record.getIndex());
-    if (stream != null) {
-      stateMachine.apply(new Command<>(record.getIndex(), timestamp, record.getValue().toByteArray()), stream)
-          .whenComplete((result, error) -> {
-            CompletableFuture<Void> future = futures.remove(record.getIndex());
-            if (future != null) {
-              threadContext.execute(() -> {
-                if (error == null) {
-                  future.complete(null);
-                } else {
-                  future.completeExceptionally(error);
-                }
-              });
-            }
-          });
-    } else {
-      stateMachine.apply(new Command<>(record.getIndex(), timestamp, record.getValue().toByteArray()))
-          .whenComplete((result, error) -> {
-            CompletableFuture<byte[]> future = futures.remove(record.getIndex());
-            if (future != null) {
-              threadContext.execute(() -> {
-                if (error == null) {
-                  future.complete(result);
-                } else {
-                  future.completeExceptionally(error);
-                }
-              });
-            }
-          });
-    }
+  public LogSession.Builder logSessionBuilder() {
+    return client.sessionBuilder();
   }
 
-  /**
-   * Log state machine context.
-   */
-  private class Context implements StateMachine.Context {
-    @Override
-    public long getIndex() {
-      return currentIndex.get();
-    }
+  @Override
+  public SessionClient.Builder sessionBuilder(String primitiveName, PrimitiveType primitiveType, ServiceConfig serviceConfig) {
+    throw new UnsupportedOperationException();
+  }
 
-    @Override
-    public long getTimestamp() {
-      return currentTimestamp.get();
+  @Override
+  public CompletableFuture<LogPartitionClient> start() {
+    synchronized (LogPartitionClient.this) {
+      client = newClient();
+      log.debug("Successfully started client for {}", partition.id());
     }
+    return CompletableFuture.completedFuture(this);
+  }
 
-    @Override
-    public OperationType getOperationType() {
-      return currentOperationType;
-    }
+  private DistributedLogSessionClient newClient() {
+    return DistributedLogSessionClient.builder()
+        .withClientName(partition.name())
+        .withPartitionId(partition.id())
+        .withMembershipService(managementService.getMembershipService())
+        .withProtocol(new LogClientCommunicator(
+            partition.name(),
+            Serializer.using(LogNamespaces.PROTOCOL),
+            managementService.getMessagingService()))
+        .withSessionIdProvider(() -> managementService.getSessionIdService().nextSessionId())
+        .withPrimaryElection(managementService.getElectionService().getElectionFor(partition.id()))
+        .withThreadContextFactory(threadFactory)
+        .build();
+  }
 
-    @Override
-    public Logger getLogger() {
-      return LOGGER;
-    }
+  @Override
+  public boolean isRunning() {
+    return client != null;
+  }
+
+  @Override
+  public CompletableFuture<Void> stop() {
+    return client != null ? client.close() : CompletableFuture.completedFuture(null);
   }
 }

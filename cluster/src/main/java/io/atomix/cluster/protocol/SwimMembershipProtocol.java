@@ -43,16 +43,12 @@ import com.google.common.collect.Maps;
 import io.atomix.cluster.BootstrapService;
 import io.atomix.cluster.Member;
 import io.atomix.cluster.MemberId;
-import io.atomix.cluster.MemberService;
 import io.atomix.cluster.Node;
 import io.atomix.cluster.discovery.NodeDiscoveryEvent;
 import io.atomix.cluster.discovery.NodeDiscoveryEventListener;
 import io.atomix.cluster.discovery.NodeDiscoveryService;
 import io.atomix.cluster.impl.AddressSerializer;
 import io.atomix.utils.Version;
-import io.atomix.utils.component.Component;
-import io.atomix.utils.component.Dependency;
-import io.atomix.utils.component.Managed;
 import io.atomix.utils.event.AbstractListenerManager;
 import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Namespace;
@@ -69,10 +65,9 @@ import static io.atomix.utils.concurrent.Threads.namedThreads;
 /**
  * SWIM group membership protocol implementation.
  */
-@Component(SwimMembershipProtocolConfig.class)
 public class SwimMembershipProtocol
     extends AbstractListenerManager<GroupMembershipEvent, GroupMembershipEventListener>
-    implements GroupMembershipProtocol, Managed<SwimMembershipProtocolConfig> {
+    implements GroupMembershipProtocol {
 
   public static final Type TYPE = new Type();
 
@@ -99,6 +94,11 @@ public class SwimMembershipProtocol
     @Override
     public SwimMembershipProtocolConfig newConfig() {
       return new SwimMembershipProtocolConfig();
+    }
+
+    @Override
+    public GroupMembershipProtocol newProtocol(SwimMembershipProtocolConfig config) {
+      return new SwimMembershipProtocol(config);
     }
   }
 
@@ -130,15 +130,11 @@ public class SwimMembershipProtocol
   private final BiConsumer<Address, byte[]> gossipListener = (address, payload) ->
       handleGossipUpdates(SERIALIZER.decode(payload));
 
-  @Dependency
-  private MemberService memberService;
-  @Dependency
+  private final SwimMembershipProtocolConfig config;
   private NodeDiscoveryService discoveryService;
-  @Dependency
   private BootstrapService bootstrapService;
 
-  private SwimMembershipProtocolConfig config;
-
+  private final AtomicBoolean started = new AtomicBoolean();
   private SwimMember localMember;
   private volatile Properties localProperties = new Properties();
   private final Map<MemberId, SwimMember> members = Maps.newConcurrentMap();
@@ -154,9 +150,6 @@ public class SwimMembershipProtocol
   private ScheduledFuture<?> probeFuture;
 
   private final AtomicInteger probeCounter = new AtomicInteger();
-
-  SwimMembershipProtocol() {
-  }
 
   SwimMembershipProtocol(SwimMembershipProtocolConfig config) {
     this.config = config;
@@ -507,7 +500,7 @@ public class SwimMembershipProtocol
   /**
    * Requests a probe of the given suspect from the given member.
    *
-   * @param member  the member to perform the probe
+   * @param member the member to perform the probe
    * @param suspect the suspect member to probe
    */
   private CompletableFuture<Boolean> requestProbe(SwimMember member, ImmutableMember suspect) {
@@ -525,7 +518,7 @@ public class SwimMembershipProtocol
   /**
    * Selects a set of random members, excluding the local member and a given member.
    *
-   * @param count   count the number of random members to select
+   * @param count count the number of random members to select
    * @param exclude the member to exclude
    * @return members a set of random members
    */
@@ -626,7 +619,7 @@ public class SwimMembershipProtocol
   /**
    * Gossips this node's pending updates with the given peer.
    *
-   * @param member  the peer with which to gossip this node's updates
+   * @param member the peer with which to gossip this node's updates
    * @param updates the updated members to gossip
    */
   private void gossip(SwimMember member, Collection<ImmutableMember> updates) {
@@ -711,52 +704,52 @@ public class SwimMembershipProtocol
   }
 
   @Override
-  public CompletableFuture<Void> start() {
-    return start(config);
-  }
+  public CompletableFuture<Void> join(BootstrapService bootstrap, NodeDiscoveryService discovery, Member member) {
+    if (started.compareAndSet(false, true)) {
+      this.bootstrapService = bootstrap;
+      this.discoveryService = discovery;
+      this.localMember = new SwimMember(
+          member.id(),
+          member.address(),
+          member.zone(),
+          member.rack(),
+          member.host(),
+          member.properties(),
+          member.version(),
+          System.currentTimeMillis());
+      this.localProperties.putAll(localMember.properties());
+      discoveryService.addListener(discoveryEventListener);
 
-  @Override
-  public CompletableFuture<Void> start(SwimMembershipProtocolConfig config) {
-    this.config = config;
-    this.localMember = new SwimMember(
-        memberService.getLocalMember().id(),
-        memberService.getLocalMember().address(),
-        memberService.getLocalMember().zone(),
-        memberService.getLocalMember().rack(),
-        memberService.getLocalMember().host(),
-        memberService.getLocalMember().properties(),
-        memberService.getLocalMember().version(),
-        System.currentTimeMillis());
-    this.localProperties.putAll(localMember.properties());
-    discoveryService.addListener(discoveryEventListener);
+      LOGGER.info("{} - Member activated: {}", localMember.id(), localMember);
+      localMember.setState(State.ALIVE);
+      members.put(localMember.id(), localMember);
+      post(new GroupMembershipEvent(GroupMembershipEvent.Type.MEMBER_ADDED, localMember));
 
-    LOGGER.info("{} - Member activated: {}", localMember.id(), localMember);
-    localMember.setState(State.ALIVE);
-    members.put(localMember.id(), localMember);
-    post(new GroupMembershipEvent(GroupMembershipEvent.Type.MEMBER_ADDED, localMember));
-
-    registerHandlers();
-    gossipFuture = swimScheduler.scheduleAtFixedRate(
-        this::gossip, 0, config.getGossipInterval().toMillis(), TimeUnit.MILLISECONDS);
-    probeFuture = swimScheduler.scheduleAtFixedRate(
-        this::probe, 0, config.getProbeInterval().toMillis(), TimeUnit.MILLISECONDS);
-    swimScheduler.execute(this::sync);
-    LOGGER.info("Started");
+      registerHandlers();
+      gossipFuture = swimScheduler.scheduleAtFixedRate(
+          this::gossip, 0, config.getGossipInterval().toMillis(), TimeUnit.MILLISECONDS);
+      probeFuture = swimScheduler.scheduleAtFixedRate(
+          this::probe, 0, config.getProbeInterval().toMillis(), TimeUnit.MILLISECONDS);
+      swimScheduler.execute(this::sync);
+      LOGGER.info("Started");
+    }
     return CompletableFuture.completedFuture(null);
   }
 
   @Override
-  public CompletableFuture<Void> stop() {
-    discoveryService.removeListener(discoveryEventListener);
-    gossipFuture.cancel(false);
-    probeFuture.cancel(false);
-    swimScheduler.shutdownNow();
-    eventExecutor.shutdownNow();
-    LOGGER.info("{} - Member deactivated: {}", localMember.id(), localMember);
-    localMember.setState(State.DEAD);
-    members.clear();
-    unregisterHandlers();
-    LOGGER.info("Stopped");
+  public CompletableFuture<Void> leave(Member member) {
+    if (started.compareAndSet(true, false)) {
+      discoveryService.removeListener(discoveryEventListener);
+      gossipFuture.cancel(false);
+      probeFuture.cancel(false);
+      swimScheduler.shutdownNow();
+      eventExecutor.shutdownNow();
+      LOGGER.info("{} - Member deactivated: {}", localMember.id(), localMember);
+      localMember.setState(State.DEAD);
+      members.clear();
+      unregisterHandlers();
+      LOGGER.info("Stopped");
+    }
     return CompletableFuture.completedFuture(null);
   }
 

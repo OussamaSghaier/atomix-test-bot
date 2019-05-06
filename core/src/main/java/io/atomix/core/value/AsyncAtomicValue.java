@@ -15,14 +15,11 @@
  */
 package io.atomix.core.value;
 
-import java.time.Duration;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-
 import io.atomix.primitive.AsyncPrimitive;
 import io.atomix.primitive.DistributedPrimitive;
-import io.atomix.primitive.PrimitiveType;
-import io.atomix.utils.time.Versioned;
+
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Distributed version of java.util.concurrent.atomic.AtomicReference.
@@ -35,10 +32,6 @@ import io.atomix.utils.time.Versioned;
  * @param <V> value type
  */
 public interface AsyncAtomicValue<V> extends AsyncPrimitive {
-  @Override
-  default PrimitiveType type() {
-    return AtomicValueType.instance();
-  }
 
   /**
    * Atomically sets the value to the given updated value if the current value is equal to the expected value.
@@ -51,27 +44,14 @@ public interface AsyncAtomicValue<V> extends AsyncPrimitive {
    * @return CompletableFuture that will be completed with {@code true} if update was successful. Otherwise future
    * will be completed with a value of {@code false}
    */
-  CompletableFuture<Optional<Versioned<V>>> compareAndSet(V expect, V update);
-
-  /**
-   * Atomically sets the value to the given updated value if the current value is equal to the expected value.
-   * <p>
-   * IMPORTANT: Equality is based on the equality of the serialized {code byte[]} representations.
-   * <p>
-   *
-   * @param version the expected value
-   * @param value the new value
-   * @return CompletableFuture that will be completed with {@code true} if update was successful. Otherwise future
-   * will be completed with a value of {@code false}
-   */
-  CompletableFuture<Optional<Versioned<V>>> compareAndSet(long version, V value);
+  CompletableFuture<Boolean> compareAndSet(V expect, V update);
 
   /**
    * Gets the current value.
    *
    * @return CompletableFuture that will be completed with the value
    */
-  CompletableFuture<Versioned<V>> get();
+  CompletableFuture<V> get();
 
   /**
    * Atomically sets to the given value and returns the old value.
@@ -79,7 +59,7 @@ public interface AsyncAtomicValue<V> extends AsyncPrimitive {
    * @param value the new value
    * @return CompletableFuture that will be completed with the previous value
    */
-  CompletableFuture<Versioned<V>> getAndSet(V value);
+  CompletableFuture<V> getAndSet(V value);
 
   /**
    * Sets to the given value.
@@ -87,7 +67,7 @@ public interface AsyncAtomicValue<V> extends AsyncPrimitive {
    * @param value value to set
    * @return CompletableFuture that will be completed when the operation finishes
    */
-  CompletableFuture<Versioned<V>> set(V value);
+  CompletableFuture<Void> set(V value);
 
   /**
    * Registers the specified listener to be notified whenever the atomic value is updated.

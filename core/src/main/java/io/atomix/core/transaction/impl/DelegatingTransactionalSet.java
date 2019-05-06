@@ -21,6 +21,7 @@ import java.util.concurrent.CompletableFuture;
 import io.atomix.core.transaction.AsyncTransactionalSet;
 import io.atomix.core.transaction.TransactionalSet;
 import io.atomix.primitive.PrimitiveType;
+import io.atomix.primitive.protocol.ProxyProtocol;
 
 /**
  * Delegating transactional set.
@@ -40,6 +41,11 @@ public abstract class DelegatingTransactionalSet<E> implements AsyncTransactiona
   @Override
   public PrimitiveType type() {
     return set.type();
+  }
+
+  @Override
+  public ProxyProtocol protocol() {
+    return (ProxyProtocol) set.protocol();
   }
 
   @Override

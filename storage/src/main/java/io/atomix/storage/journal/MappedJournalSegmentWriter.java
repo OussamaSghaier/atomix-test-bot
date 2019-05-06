@@ -15,16 +15,18 @@
  */
 package io.atomix.storage.journal;
 
+import com.esotericsoftware.kryo.KryoException;
+import io.atomix.storage.StorageException;
+import io.atomix.storage.journal.index.JournalIndex;
+import io.atomix.utils.memory.BufferCleaner;
+import io.atomix.utils.serializer.Namespace;
+
 import java.io.IOException;
 import java.nio.BufferOverflowException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.util.zip.CRC32;
-
-import io.atomix.storage.StorageException;
-import io.atomix.storage.journal.index.JournalIndex;
-import io.atomix.utils.memory.BufferCleaner;
 
 /**
  * Segment writer.
@@ -47,7 +49,7 @@ class MappedJournalSegmentWriter<E> implements JournalWriter<E> {
   private final JournalSegment<E> segment;
   private final int maxEntrySize;
   private final JournalIndex index;
-  private final JournalCodec<E> codec;
+  private final Namespace namespace;
   private final long firstIndex;
   private Indexed<E> lastEntry;
 
@@ -56,13 +58,13 @@ class MappedJournalSegmentWriter<E> implements JournalWriter<E> {
       JournalSegment<E> segment,
       int maxEntrySize,
       JournalIndex index,
-      JournalCodec<E> codec) {
+      Namespace namespace) {
     this.mappedBuffer = buffer;
     this.buffer = buffer.slice();
     this.segment = segment;
     this.maxEntrySize = maxEntrySize;
     this.index = index;
-    this.codec = codec;
+    this.namespace = namespace;
     this.firstIndex = segment.index();
     reset(0);
   }
@@ -107,14 +109,10 @@ class MappedJournalSegmentWriter<E> implements JournalWriter<E> {
         // If the stored checksum equals the computed checksum, return the entry.
         if (checksum == crc32.getValue()) {
           slice.rewind();
-          try {
-            final E entry = codec.decode(slice);
-            lastEntry = new Indexed<>(nextIndex, entry, length);
-            this.index.index(nextIndex, position);
-            nextIndex++;
-          } catch (IOException e) {
-            throw new StorageException(e);
-          }
+          final E entry = namespace.deserialize(slice);
+          lastEntry = new Indexed<>(nextIndex, entry, length);
+          this.index.index(nextIndex, position);
+          nextIndex++;
         } else {
           break;
         }
@@ -203,8 +201,8 @@ class MappedJournalSegmentWriter<E> implements JournalWriter<E> {
     buffer.position(position + Integer.BYTES + Integer.BYTES);
 
     try {
-      codec.encode(entry, buffer);
-    } catch (Exception e) {
+      namespace.serialize(entry, buffer);
+    } catch (KryoException e) {
       throw new BufferOverflowException();
     }
 

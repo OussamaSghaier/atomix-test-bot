@@ -16,11 +16,13 @@
 package io.atomix.core.collection;
 
 import com.google.common.collect.Lists;
-import io.atomix.primitive.ManagedPrimitiveBuilder;
+import io.atomix.primitive.PrimitiveBuilder;
 import io.atomix.primitive.PrimitiveManagementService;
 import io.atomix.primitive.PrimitiveType;
-import io.atomix.utils.serializer.Namespaces;
+import io.atomix.utils.serializer.Namespace;
+import io.atomix.utils.serializer.NamespaceConfig;
 import io.atomix.utils.serializer.Serializer;
+import io.atomix.utils.serializer.SerializerBuilder;
 
 /**
  * Distributed collection builder.
@@ -29,7 +31,7 @@ public abstract class DistributedCollectionBuilder<
     B extends DistributedCollectionBuilder<B, C, P, E>,
     C extends DistributedCollectionConfig<C>,
     P extends DistributedCollection<E>, E>
-    extends ManagedPrimitiveBuilder<B, C, P> {
+    extends PrimitiveBuilder<B, C, P> {
   protected DistributedCollectionBuilder(PrimitiveType type, String name, C config, PrimitiveManagementService managementService) {
     super(type, name, config, managementService);
   }
@@ -121,7 +123,29 @@ public abstract class DistributedCollectionBuilder<
    */
   protected Serializer serializer() {
     if (serializer == null) {
-      serializer = Serializer.using(Namespaces.BASIC);
+      NamespaceConfig namespaceConfig = this.config.getNamespaceConfig();
+      if (namespaceConfig == null) {
+        namespaceConfig = new NamespaceConfig();
+      }
+
+      SerializerBuilder serializerBuilder = managementService.getSerializationService().newBuilder(name);
+      serializerBuilder.withNamespace(new Namespace(namespaceConfig));
+
+      if (config.isRegistrationRequired()) {
+        serializerBuilder.withRegistrationRequired();
+      }
+      if (config.isCompatibleSerialization()) {
+        serializerBuilder.withCompatibleSerialization();
+      }
+
+      if (config.getElementType() != null) {
+        serializerBuilder.addType(config.getElementType());
+      }
+      if (!config.getExtraTypes().isEmpty()) {
+        serializerBuilder.withTypes(config.getExtraTypes().toArray(new Class<?>[config.getExtraTypes().size()]));
+      }
+
+      serializer = serializerBuilder.build();
     }
     return serializer;
   }

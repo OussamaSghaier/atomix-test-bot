@@ -15,6 +15,8 @@
  */
 package io.atomix.cluster.messaging;
 
+import io.atomix.cluster.MemberId;
+
 import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -22,8 +24,6 @@ import java.util.concurrent.Executor;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-
-import io.atomix.cluster.MemberId;
 
 import static io.atomix.utils.serializer.serializers.DefaultSerializers.BASIC;
 

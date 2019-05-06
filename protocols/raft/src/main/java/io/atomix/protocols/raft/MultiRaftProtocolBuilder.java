@@ -15,14 +15,13 @@
  */
 package io.atomix.protocols.raft;
 
-import java.time.Duration;
-import java.util.concurrent.TimeUnit;
-
 import io.atomix.primitive.Recovery;
 import io.atomix.primitive.partition.Partitioner;
 import io.atomix.primitive.protocol.PrimitiveProtocolBuilder;
-import io.atomix.raft.CommunicationStrategy;
-import io.atomix.raft.ReadConsistency;
+import io.atomix.protocols.raft.session.CommunicationStrategy;
+
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Multi-Raft protocol builder.
@@ -44,13 +43,24 @@ public class MultiRaftProtocolBuilder extends PrimitiveProtocolBuilder<MultiRaft
   }
 
   /**
-   * Sets the session timeout.
+   * Sets the minimum session timeout.
    *
-   * @param timeout the session timeout
+   * @param minTimeout the minimum session timeout
    * @return the Raft protocol builder
    */
-  public MultiRaftProtocolBuilder withTimeout(Duration timeout) {
-    config.setTimeout(timeout);
+  public MultiRaftProtocolBuilder withMinTimeout(Duration minTimeout) {
+    config.setMinTimeout(minTimeout);
+    return this;
+  }
+
+  /**
+   * Sets the maximum session timeout.
+   *
+   * @param maxTimeout the maximum session timeout
+   * @return the Raft protocol builder
+   */
+  public MultiRaftProtocolBuilder withMaxTimeout(Duration maxTimeout) {
+    config.setMaxTimeout(maxTimeout);
     return this;
   }
 

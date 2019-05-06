@@ -15,21 +15,12 @@
  */
 package io.atomix.cluster.messaging.impl;
 
-import java.net.InetSocketAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
-
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import io.atomix.cluster.ClusterConfig;
 import io.atomix.cluster.messaging.BroadcastService;
+import io.atomix.cluster.messaging.ManagedBroadcastService;
 import io.atomix.utils.AtomixRuntimeException;
-import io.atomix.utils.component.Component;
-import io.atomix.utils.component.Managed;
+import io.atomix.utils.net.Address;
 import io.atomix.utils.serializer.Namespace;
 import io.atomix.utils.serializer.Namespaces;
 import io.atomix.utils.serializer.Serializer;
@@ -49,13 +40,79 @@ import io.netty.channel.socket.nio.NioDatagramChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.atomix.utils.concurrent.Threads.namedThreads;
 
 /**
  * Netty broadcast service.
  */
-@Component(ClusterConfig.class)
-public class NettyBroadcastService implements BroadcastService, Managed<ClusterConfig> {
+public class NettyBroadcastService implements ManagedBroadcastService {
+
+  /**
+   * Returns a new broadcast service builder.
+   *
+   * @return a new broadcast service builder
+   */
+  public static Builder builder() {
+    return new Builder();
+  }
+
+  /**
+   * Netty broadcast service builder.
+   */
+  public static class Builder implements BroadcastService.Builder {
+    private Address localAddress;
+    private Address groupAddress;
+    private boolean enabled = true;
+
+    /**
+     * Sets the local address.
+     *
+     * @param address the local address
+     * @return the broadcast service builder
+     */
+    public Builder withLocalAddress(Address address) {
+      this.localAddress = checkNotNull(address);
+      return this;
+    }
+
+    /**
+     * Sets the group address.
+     *
+     * @param address the group address
+     * @return the broadcast service builder
+     */
+    public Builder withGroupAddress(Address address) {
+      this.groupAddress = checkNotNull(address);
+      return this;
+    }
+
+    /**
+     * Sets whether the service is enabled.
+     *
+     * @param enabled whether the service is enabled
+     * @return the broadcast service builder
+     */
+    public Builder withEnabled(boolean enabled) {
+      this.enabled = enabled;
+      return this;
+    }
+
+    @Override
+    public ManagedBroadcastService build() {
+      return new NettyBroadcastService(localAddress, groupAddress, enabled);
+    }
+  }
+
   private static final Serializer SERIALIZER = Serializer.using(Namespace.builder()
       .register(Namespaces.BASIC)
       .nextId(Namespaces.BEGIN_USER_CUSTOM_ID)
@@ -64,15 +121,28 @@ public class NettyBroadcastService implements BroadcastService, Managed<ClusterC
 
   private final Logger log = LoggerFactory.getLogger(getClass());
 
-  private boolean enabled;
-  private InetSocketAddress localAddress;
-  private InetSocketAddress groupAddress;
-  private NetworkInterface iface;
+  private final boolean enabled;
+  private final InetSocketAddress localAddress;
+  private final InetSocketAddress groupAddress;
+  private final NetworkInterface iface;
   private EventLoopGroup group;
   private Channel serverChannel;
   private DatagramChannel clientChannel;
 
   private final Map<String, Set<Consumer<byte[]>>> listeners = Maps.newConcurrentMap();
+  private final AtomicBoolean started = new AtomicBoolean();
+
+  public NettyBroadcastService(Address localAddress, Address groupAddress, boolean enabled) {
+    this.enabled = enabled;
+    // intentionally using the multicast port for localAddress
+    this.localAddress = new InetSocketAddress(localAddress.host(), groupAddress.port());
+    this.groupAddress = new InetSocketAddress(groupAddress.host(), groupAddress.port());
+    try {
+      iface = NetworkInterface.getByInetAddress(localAddress.address());
+    } catch (SocketException e) {
+      throw new AtomixRuntimeException(e);
+    }
+  }
 
   @Override
   public void broadcast(String subject, byte[] payload) {
@@ -170,24 +240,20 @@ public class NettyBroadcastService implements BroadcastService, Managed<ClusterC
   }
 
   @Override
-  public CompletableFuture<Void> start(ClusterConfig config) {
-    this.enabled = config.getMulticastConfig().isEnabled();
-    // intentionally using the multicast port for localAddress
-    this.localAddress = new InetSocketAddress(config.getNodeConfig().getAddress().host(), config.getNodeConfig().getAddress().port());
-    this.groupAddress = new InetSocketAddress(config.getMulticastConfig().getGroup().getHostAddress(), config.getMulticastConfig().getPort());
-    try {
-      iface = NetworkInterface.getByInetAddress(config.getNodeConfig().getAddress().address());
-    } catch (SocketException e) {
-      throw new AtomixRuntimeException(e);
-    }
-
+  public CompletableFuture<BroadcastService> start() {
     if (!enabled) {
-      return CompletableFuture.completedFuture(null);
+      return CompletableFuture.completedFuture(this);
     }
     group = new NioEventLoopGroup(0, namedThreads("netty-broadcast-event-nio-client-%d", log));
     return bootstrapServer()
         .thenCompose(v -> bootstrapClient())
-        .thenApply(v -> null);
+        .thenRun(() -> started.set(true))
+        .thenApply(v -> this);
+  }
+
+  @Override
+  public boolean isRunning() {
+    return started.get();
   }
 
   @Override
@@ -198,11 +264,13 @@ public class NettyBroadcastService implements BroadcastService, Managed<ClusterC
     if (clientChannel != null) {
       CompletableFuture<Void> future = new CompletableFuture<>();
       clientChannel.leaveGroup(groupAddress, iface).addListener(f -> {
+        started.set(false);
         group.shutdownGracefully();
         future.complete(null);
       });
       return future;
     }
+    started.set(false);
     return CompletableFuture.completedFuture(null);
   }
 

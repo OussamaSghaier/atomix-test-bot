@@ -15,19 +15,17 @@
  */
 package io.atomix.core.value.impl;
 
-import java.time.Duration;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
-
 import com.google.common.collect.Maps;
 import io.atomix.core.value.AsyncAtomicValue;
 import io.atomix.core.value.AtomicValue;
 import io.atomix.core.value.AtomicValueEvent;
 import io.atomix.core.value.AtomicValueEventListener;
 import io.atomix.primitive.impl.DelegatingAsyncPrimitive;
-import io.atomix.utils.time.Versioned;
+
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 
@@ -49,30 +47,23 @@ public class TranscodingAsyncAtomicValue<V1, V2> extends DelegatingAsyncPrimitiv
   }
 
   @Override
-  public CompletableFuture<Optional<Versioned<V1>>> compareAndSet(V1 expect, V1 update) {
-    return backingValue.compareAndSet(valueEncoder.apply(expect), valueEncoder.apply(update))
-        .thenApply(result -> result.map(v -> v != null ? v.map(valueDecoder) : null));
+  public CompletableFuture<Boolean> compareAndSet(V1 expect, V1 update) {
+    return backingValue.compareAndSet(valueEncoder.apply(expect), valueEncoder.apply(update));
   }
 
   @Override
-  public CompletableFuture<Optional<Versioned<V1>>> compareAndSet(long version, V1 value) {
-    return backingValue.compareAndSet(version, valueEncoder.apply(value))
-        .thenApply(result -> result.map(v -> v != null ? v.map(valueDecoder) : null));
+  public CompletableFuture<V1> get() {
+    return backingValue.get().thenApply(valueDecoder);
   }
 
   @Override
-  public CompletableFuture<Versioned<V1>> get() {
-    return backingValue.get().thenApply(v -> v != null ? v.map(valueDecoder) : null);
+  public CompletableFuture<V1> getAndSet(V1 value) {
+    return backingValue.getAndSet(valueEncoder.apply(value)).thenApply(valueDecoder);
   }
 
   @Override
-  public CompletableFuture<Versioned<V1>> getAndSet(V1 value) {
-    return backingValue.getAndSet(valueEncoder.apply(value)).thenApply(v -> v != null ? v.map(valueDecoder) : null);
-  }
-
-  @Override
-  public CompletableFuture<Versioned<V1>> set(V1 value) {
-    return backingValue.set(valueEncoder.apply(value)).thenApply(v -> v != null ? v.map(valueDecoder) : null);
+  public CompletableFuture<Void> set(V1 value) {
+    return backingValue.set(valueEncoder.apply(value));
   }
 
   @Override
@@ -119,8 +110,8 @@ public class TranscodingAsyncAtomicValue<V1, V2> extends DelegatingAsyncPrimitiv
     public void event(AtomicValueEvent<V2> event) {
       listener.event(new AtomicValueEvent<>(
           AtomicValueEvent.Type.UPDATE,
-          event.newValue() != null ? event.newValue().map(valueDecoder) : null,
-          event.oldValue() != null ? event.oldValue().map(valueDecoder) : null));
+          valueDecoder.apply(event.newValue()),
+          valueDecoder.apply(event.oldValue())));
     }
   }
 }

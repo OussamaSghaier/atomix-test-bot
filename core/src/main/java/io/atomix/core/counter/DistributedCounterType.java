@@ -15,17 +15,18 @@
  */
 package io.atomix.core.counter;
 
+import io.atomix.core.counter.impl.DefaultAtomicCounterService;
 import io.atomix.core.counter.impl.DefaultDistributedCounterBuilder;
 import io.atomix.primitive.PrimitiveManagementService;
 import io.atomix.primitive.PrimitiveType;
-import io.atomix.utils.component.Component;
+import io.atomix.primitive.service.PrimitiveService;
+import io.atomix.primitive.service.ServiceConfig;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 
 /**
  * Distributed counter primitive type.
  */
-@Component
 public class DistributedCounterType implements PrimitiveType<DistributedCounterBuilder, DistributedCounterConfig, DistributedCounter> {
   private static final String NAME = "counter";
   private static final DistributedCounterType INSTANCE = new DistributedCounterType();
@@ -42,6 +43,11 @@ public class DistributedCounterType implements PrimitiveType<DistributedCounterB
   @Override
   public String name() {
     return NAME;
+  }
+
+  @Override
+  public PrimitiveService newService(ServiceConfig config) {
+    return new DefaultAtomicCounterService();
   }
 
   @Override

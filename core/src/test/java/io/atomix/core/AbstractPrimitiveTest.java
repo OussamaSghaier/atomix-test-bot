@@ -15,18 +15,17 @@
  */
 package io.atomix.core;
 
+import io.atomix.core.test.TestAtomixFactory;
+import io.atomix.core.test.protocol.TestProtocol;
+import io.atomix.primitive.protocol.ProxyProtocol;
+import org.junit.After;
+import org.junit.Before;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
-import io.atomix.core.test.TestAtomixFactory;
-import io.atomix.core.test.protocol.TestProtocol;
-import io.atomix.core.test.protocol.TestStateMachine;
-import io.atomix.primitive.protocol.ProxyProtocol;
-import org.junit.After;
-import org.junit.Before;
 
 /**
  * Base Atomix test.
@@ -71,7 +70,7 @@ public abstract class AbstractPrimitiveTest {
   public void setupTest() throws Exception {
     members = new ArrayList<>();
     atomixFactory = new TestAtomixFactory();
-    protocol = TestProtocol.builder("test")
+    protocol = TestProtocol.builder()
         .withNumPartitions(3)
         .build();
   }
@@ -83,7 +82,8 @@ public abstract class AbstractPrimitiveTest {
       CompletableFuture.allOf(futures.toArray(new CompletableFuture[futures.size()])).get(30, TimeUnit.SECONDS);
     } catch (Exception e) {
       // Do nothing
+    } finally {
+      protocol.close();
     }
-    TestStateMachine.destroyInstances();
   }
 }

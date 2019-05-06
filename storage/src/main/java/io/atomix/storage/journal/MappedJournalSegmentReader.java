@@ -15,15 +15,14 @@
  */
 package io.atomix.storage.journal;
 
-import java.io.IOException;
+import io.atomix.storage.journal.index.JournalIndex;
+import io.atomix.storage.journal.index.Position;
+import io.atomix.utils.serializer.Namespace;
+
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.NoSuchElementException;
 import java.util.zip.CRC32;
-
-import io.atomix.storage.StorageException;
-import io.atomix.storage.journal.index.JournalIndex;
-import io.atomix.storage.journal.index.Position;
 
 /**
  * Log segment reader.
@@ -34,7 +33,7 @@ class MappedJournalSegmentReader<E> implements JournalReader<E> {
   private final ByteBuffer buffer;
   private final int maxEntrySize;
   private final JournalIndex index;
-  private final JournalCodec<E> codec;
+  private final Namespace namespace;
   private final long firstIndex;
   private Indexed<E> currentEntry;
   private Indexed<E> nextEntry;
@@ -44,11 +43,11 @@ class MappedJournalSegmentReader<E> implements JournalReader<E> {
       JournalSegment<E> segment,
       int maxEntrySize,
       JournalIndex index,
-      JournalCodec<E> codec) {
+      Namespace namespace) {
     this.buffer = buffer.slice();
     this.maxEntrySize = maxEntrySize;
     this.index = index;
-    this.codec = codec;
+    this.namespace = namespace;
     this.firstIndex = segment.index();
     reset();
   }
@@ -157,13 +156,9 @@ class MappedJournalSegmentReader<E> implements JournalReader<E> {
       // If the stored checksum equals the computed checksum, return the entry.
       if (checksum == crc32.getValue()) {
         slice.rewind();
-        try {
-          E entry = codec.decode(slice);
-          nextEntry = new Indexed<>(index, entry, length);
-          buffer.position(buffer.position() + length);
-        } catch (IOException e) {
-          throw new StorageException(e);
-        }
+        E entry = namespace.deserialize(slice);
+        nextEntry = new Indexed<>(index, entry, length);
+        buffer.position(buffer.position() + length);
       } else {
         buffer.reset();
         nextEntry = null;

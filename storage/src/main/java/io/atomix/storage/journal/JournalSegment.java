@@ -15,6 +15,13 @@
  */
 package io.atomix.storage.journal;
 
+import com.google.common.collect.Sets;
+import io.atomix.storage.StorageException;
+import io.atomix.storage.StorageLevel;
+import io.atomix.storage.journal.index.JournalIndex;
+import io.atomix.storage.journal.index.SparseJournalIndex;
+import io.atomix.utils.serializer.Namespace;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.MappedByteBuffer;
@@ -23,12 +30,6 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import com.google.common.collect.Sets;
-import io.atomix.storage.StorageException;
-import io.atomix.storage.StorageLevel;
-import io.atomix.storage.journal.index.JournalIndex;
-import io.atomix.storage.journal.index.SparseJournalIndex;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkState;
@@ -44,7 +45,7 @@ public class JournalSegment<E> implements AutoCloseable {
   private final StorageLevel storageLevel;
   private final int maxEntrySize;
   private final JournalIndex index;
-  private final JournalCodec<E> codec;
+  private final Namespace namespace;
   private final MappableJournalSegmentWriter<E> writer;
   private final Set<MappableJournalSegmentReader<E>> readers = Sets.newConcurrentHashSet();
   private final AtomicInteger references = new AtomicInteger();
@@ -56,14 +57,14 @@ public class JournalSegment<E> implements AutoCloseable {
       StorageLevel storageLevel,
       int maxEntrySize,
       double indexDensity,
-      JournalCodec<E> codec) {
+      Namespace namespace) {
     this.file = file;
     this.descriptor = descriptor;
     this.storageLevel = storageLevel;
     this.maxEntrySize = maxEntrySize;
     this.index = new SparseJournalIndex(indexDensity);
-    this.codec = codec;
-    this.writer = new MappableJournalSegmentWriter<>(openChannel(file.file()), this, maxEntrySize, index, codec);
+    this.namespace = namespace;
+    this.writer = new MappableJournalSegmentWriter<>(openChannel(file.file()), this, maxEntrySize, index, namespace);
   }
 
   private FileChannel openChannel(File file) {
@@ -211,7 +212,7 @@ public class JournalSegment<E> implements AutoCloseable {
   MappableJournalSegmentReader<E> createReader() {
     checkOpen();
     MappableJournalSegmentReader<E> reader = new MappableJournalSegmentReader<>(
-        openChannel(file.file()), this, maxEntrySize, index, codec);
+        openChannel(file.file()), this, maxEntrySize, index, namespace);
     MappedByteBuffer buffer = writer.buffer();
     if (buffer != null) {
       reader.map(buffer);

@@ -15,14 +15,37 @@
  */
 package io.atomix.primitive.session;
 
-import java.util.Collection;
+import io.atomix.cluster.MemberId;
+import io.atomix.primitive.PrimitiveType;
+import io.atomix.primitive.event.EventType;
+import io.atomix.primitive.event.PrimitiveEvent;
 
-import io.atomix.primitive.operation.StreamType;
+import java.util.function.Consumer;
 
 /**
- * Provides session context for session-managed state machines.
+ * Provides an interface to communicating with a client via session events.
+ * <p>
+ * Sessions represent a connection between a single client and all servers in a Raft cluster. Session information
+ * is replicated via the Raft consensus algorithm, and clients can safely switch connections between servers without
+ * losing their session. All consistency guarantees are provided within the context of a session. Once a session is
+ * expired or closed, linearizability, sequential consistency, and other guarantees for events and operations are
+ * effectively lost. Session implementations guarantee linearizability for session messages by coordinating between
+ * the client and a single server at any given time. This means messages {@link #publish(PrimitiveEvent) published}
+ * via the {@link Session} are guaranteed to arrive on the other side of the connection exactly once and in the order
+ * in which they are sent by replicated state machines. In the event of a server-to-client message being lost, the
+ * message will be resent so long as at least one Raft server is able to communicate with the client and the client's
+ * session does not expire while switching between servers.
+ * <p>
+ * Messages are sent to the other side of the session using the {@link #publish(PrimitiveEvent)} method:
+ * <pre>
+ *   {@code
+ *     session.publish("myEvent", "Hello world!");
+ *   }
+ * </pre>
+ * When the message is published, it will be queued to be sent to the other side of the connection. Raft guarantees
+ * that the message will eventually be received by the client unless the session itself times out or is closed.
  */
-public interface Session {
+public interface Session<C> {
 
   /**
    * Returns the session identifier.
@@ -32,6 +55,27 @@ public interface Session {
   SessionId sessionId();
 
   /**
+   * Returns the session's service name.
+   *
+   * @return The session's service name.
+   */
+  String primitiveName();
+
+  /**
+   * Returns the session's service type.
+   *
+   * @return The session's service type.
+   */
+  PrimitiveType primitiveType();
+
+  /**
+   * Returns the member identifier to which the session belongs.
+   *
+   * @return The member to which the session belongs.
+   */
+  MemberId memberId();
+
+  /**
    * Returns the session state.
    *
    * @return The session state.
@@ -39,29 +83,36 @@ public interface Session {
   State getState();
 
   /**
-   * Returns a stream by ID.
+   * Publishes an empty event to the session.
    *
-   * @param streamId the stream ID
-   * @return the stream
+   * @param eventType the event type
    */
-  default <T> SessionStreamHandler<T> getStream(long streamId) {
-    return getStream(new StreamId(sessionId(), streamId));
+  default void publish(EventType eventType) {
+    publish(eventType, null);
   }
 
   /**
-   * Returns a stream by ID.
+   * Publishes an event to the session.
    *
-   * @param streamId the stream ID
-   * @return the stream
+   * @param eventType the event identifier
+   * @param event     the event value
+   * @param <T>       the event type
    */
-  <T> SessionStreamHandler<T> getStream(StreamId streamId);
+  <T> void publish(EventType eventType, T event);
 
   /**
-   * Returns the collection of open streams of the given type.
+   * Publishes an event to the session.
    *
-   * @return the collection of open streams of the given type
+   * @param event the event to publish
    */
-  <T> Collection<SessionStreamHandler<T>> getStreams(StreamType<T> streamType);
+  void publish(PrimitiveEvent event);
+
+  /**
+   * Sends an event to the client via the client proxy.
+   *
+   * @param event the client proxy operation
+   */
+  void accept(Consumer<C> event);
 
   /**
    * Session state enums.

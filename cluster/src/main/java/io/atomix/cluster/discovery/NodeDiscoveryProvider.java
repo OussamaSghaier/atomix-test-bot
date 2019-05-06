@@ -15,8 +15,7 @@
  */
 package io.atomix.cluster.discovery;
 
-import java.util.Set;
-
+import io.atomix.cluster.BootstrapService;
 import io.atomix.cluster.ClusterMembershipService;
 import io.atomix.cluster.Member;
 import io.atomix.cluster.Node;
@@ -24,6 +23,9 @@ import io.atomix.utils.ConfiguredType;
 import io.atomix.utils.config.Configured;
 import io.atomix.utils.event.ListenerService;
 import io.atomix.utils.net.Address;
+
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Cluster membership provider.
@@ -60,5 +62,22 @@ public interface NodeDiscoveryProvider
    * @return the set of active nodes
    */
   Set<Node> getNodes();
+
+  /**
+   * Joins the cluster.
+   *
+   * @param bootstrap the bootstrap service
+   * @param localNode the local node info
+   * @return a future to be completed once the join is complete
+   */
+  CompletableFuture<Void> join(BootstrapService bootstrap, Node localNode);
+
+  /**
+   * Leaves the cluster.
+   *
+   * @param localNode the local node info
+   * @return a future to be completed once the leave is complete
+   */
+  CompletableFuture<Void> leave(Node localNode);
 
 }
