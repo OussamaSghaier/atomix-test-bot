@@ -1,3 +1,8 @@
+->RefactoringNumber->234707<-ExtractSubClass(io.atomix.protocols.raft.test.RaftPerformanceTest.TestPrimitiveType.PerformanceService.TestMember;Class_3;[type];[demote])
+->RefactoringNumber->234709<-ExtractSubClass(io.atomix.protocols.raft.test.RaftPerformanceTest.TestPrimitiveType.PerformanceService.TestMember.BroadcastServiceAdapter;Class_5;[];[addListener])
+->RefactoringNumber->234711<-ExtractSuperClass(io.atomix.protocols.raft.test.RaftPerformanceTest.TestPrimitiveType.PerformanceService.TestMember;Class_7;[memberId];[promote])
+->RefactoringNumber->234722<-MoveField(io.atomix.protocols.raft.impl.MetadataResult;io.atomix.protocols.raft.test.RaftPerformanceTest.TestPrimitiveType.PerformanceService;[sessions];[])
+<-endRefactoring marker->
 /*
  * Copyright 2017-present the original author or authors.
  *

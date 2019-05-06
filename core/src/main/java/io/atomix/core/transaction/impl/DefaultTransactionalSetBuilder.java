@@ -1,3 +1,5 @@
+->RefactoringNumber->234721<-ExtractClass(io.atomix.core.transaction.impl.DefaultTransactionalSetBuilder;Class_8;[setBuilder];[withSerializer])
+<-endRefactoring marker->
 /*
  * Copyright 2017-present Open Networking Foundation
  *

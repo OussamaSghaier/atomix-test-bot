@@ -1,3 +1,6 @@
+->RefactoringNumber->234702<-ExtractSuperClass(io.atomix.core.multiset.DistributedMultisetTest.TestQueueEventListener;Class_1;[];[eventReceived])
+->RefactoringNumber->234723<-MoveField(io.atomix.core.multiset.DistributedMultisetTest.TestQueueEventListener;io.atomix.primitive.partition.impl.DefaultPrimaryElection;[queue];[])
+<-endRefactoring marker->
 /*
  * Copyright 2018-present Open Networking Foundation
  *

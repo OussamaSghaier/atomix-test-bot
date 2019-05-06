@@ -1,3 +1,8 @@
+->RefactoringNumber->234704<-PullUpMethod(io.atomix.cluster.messaging.impl.NettyMessagingService.SslServerCommunicationChannelInitializer.SslClientCommunicationChannelInitializer;io.atomix.cluster.messaging.impl.ChannelInitializer;[];[initChannel])
+->RefactoringNumber->234717<-DecreaseMethodSecurity(io.atomix.cluster.messaging.impl.NettyMessagingService;;[];[timeoutAllCallbacks])
+->RefactoringNumber->234719<-DecreaseMethodSecurity(io.atomix.cluster.messaging.impl.NettyMessagingService;;[];[timeoutAllCallbacks])
+->RefactoringNumber->234720<-PullUpMethod(io.atomix.cluster.messaging.impl.NettyMessagingService.SslServerCommunicationChannelInitializer.SslClientCommunicationChannelInitializer.BasicChannelInitializer.InboundMessageDispatcher;io.atomix.cluster.messaging.impl.SimpleChannelInboundHandler;[];[exceptionCaught])
+<-endRefactoring marker->
 /*
  * Copyright 2015-present Open Networking Foundation
  *

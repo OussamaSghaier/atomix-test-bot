@@ -1,3 +1,5 @@
+->RefactoringNumber->234712<-PullUpMethod(io.atomix.utils.serializer.serializers.ImmutableSetSerializer;io.atomix.utils.serializer.serializers.Serializer;[];[write])
+<-endRefactoring marker->
 /*
  * Copyright 2014-present Open Networking Foundation
  *

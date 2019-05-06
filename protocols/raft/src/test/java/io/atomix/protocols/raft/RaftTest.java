@@ -1,3 +1,5 @@
+->RefactoringNumber->234714<-MoveMethod(io.atomix.protocols.raft.RaftTest.TestPrimitiveType;io.atomix.protocols.raft.impl.RaftClient.Builder;[];[newService])
+<-endRefactoring marker->
 /*
  * Copyright 2017-present Open Networking Foundation
  *

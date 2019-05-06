@@ -1,3 +1,5 @@
+->RefactoringNumber->234722<-MoveField(io.atomix.protocols.raft.impl.MetadataResult;io.atomix.protocols.raft.test.RaftPerformanceTest.TestPrimitiveType.PerformanceService;[sessions];[])
+<-endRefactoring marker->
 /*
  * Copyright 2017-present Open Networking Foundation
  *

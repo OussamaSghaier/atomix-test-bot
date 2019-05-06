@@ -1,3 +1,5 @@
+->RefactoringNumber->234715<-PullUpMethod(io.atomix.protocols.raft.partition.RaftPartitionGroup.Type.Builder;io.atomix.protocols.raft.partition.PartitionGroup.Builder;[];[withMembers])
+<-endRefactoring marker->
 /*
  * Copyright 2017-present Open Networking Foundation
  *

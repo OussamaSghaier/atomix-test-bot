@@ -1,3 +1,5 @@
+->RefactoringNumber->234713<-PullUpMethod(io.atomix.protocols.raft.protocol.MetadataResponse.Builder;io.atomix.protocols.raft.protocol.AbstractRaftResponse.Builder;[];[withSessions])
+<-endRefactoring marker->
 /*
  * Copyright 2017-present Open Networking Foundation
  *

@@ -1,3 +1,5 @@
+->RefactoringNumber->234703<-PullUpMethod(io.atomix.protocols.raft.protocol.HeartbeatRequest.Builder;io.atomix.protocols.raft.protocol.AbstractRaftRequest.Builder;[];[build])
+<-endRefactoring marker->
 /*
  * Copyright 2015-present Open Networking Foundation
  *

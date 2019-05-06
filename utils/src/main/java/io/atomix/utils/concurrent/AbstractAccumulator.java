@@ -1,3 +1,5 @@
+->RefactoringNumber->234716<-PullUpMethod(io.atomix.utils.concurrent.AbstractAccumulator.ProcessorTask;java.util.TimerTask;[];[timer])
+<-endRefactoring marker->
 /*
  * Copyright 2015-present Open Networking Foundation
  *

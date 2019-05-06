@@ -1,3 +1,5 @@
+->RefactoringNumber->234708<-ExtractSuperClass(io.atomix.cluster.ClusterConfig;Class_4;[discoveryConfig];[getDiscoveryConfig|getMessagingConfig|setDiscoveryConfig|setMembershipConfig|setMessagingConfig])
+<-endRefactoring marker->
 /*
  * Copyright 2018-present Open Networking Foundation
  *

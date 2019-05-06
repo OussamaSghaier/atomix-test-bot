@@ -1,3 +1,5 @@
+->RefactoringNumber->234718<-MoveField(io.atomix.core.profile.ConsensusProfileBuilder;io.atomix.core.lock.impl.DefaultAtomicLockServiceTest;[config];[])
+<-endRefactoring marker->
 /*
  * Copyright 2018-present Open Networking Foundation
  *

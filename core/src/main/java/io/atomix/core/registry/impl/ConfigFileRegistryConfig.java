@@ -1,3 +1,5 @@
+->RefactoringNumber->234710<-ExtractSuperClass(io.atomix.core.registry.impl.ConfigFileRegistryConfig;Class_6;[profileTypes];[getProfileTypes|setProtocolTypes])
+<-endRefactoring marker->
 /*
  * Copyright 2018-present Open Networking Foundation
  *

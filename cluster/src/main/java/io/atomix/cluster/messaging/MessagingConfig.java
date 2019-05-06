@@ -1,3 +1,5 @@
+->RefactoringNumber->234705<-ExtractSubClass(io.atomix.cluster.messaging.MessagingConfig;Class_2;[tlsConfig];[getConnectTimeout])
+<-endRefactoring marker->
 /*
  * Copyright 2018-present Open Networking Foundation
  *
