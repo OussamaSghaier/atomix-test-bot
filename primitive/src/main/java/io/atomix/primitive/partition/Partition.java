@@ -15,9 +15,9 @@
  */
 package io.atomix.primitive.partition;
 
-import io.atomix.cluster.MemberId;
-
 import java.util.Collection;
+
+import io.atomix.cluster.MemberId;
 
 /**
  * Atomix partition.

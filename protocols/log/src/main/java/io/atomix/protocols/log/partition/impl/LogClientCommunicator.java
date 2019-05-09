@@ -18,43 +18,43 @@ package io.atomix.protocols.log.partition.impl;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Message;
 import io.atomix.cluster.MemberId;
 import io.atomix.cluster.messaging.ClusterCommunicationService;
 import io.atomix.cluster.messaging.MessagingException;
+import io.atomix.log.protocol.AppendRequest;
+import io.atomix.log.protocol.AppendResponse;
+import io.atomix.log.protocol.ConsumeRequest;
+import io.atomix.log.protocol.ConsumeResponse;
+import io.atomix.log.protocol.LogClientProtocol;
+import io.atomix.log.protocol.RecordsRequest;
+import io.atomix.log.protocol.ResetRequest;
 import io.atomix.primitive.PrimitiveException;
-import io.atomix.protocols.log.protocol.AppendRequest;
-import io.atomix.protocols.log.protocol.AppendResponse;
-import io.atomix.protocols.log.protocol.ConsumeRequest;
-import io.atomix.protocols.log.protocol.ConsumeResponse;
-import io.atomix.protocols.log.protocol.LogClientProtocol;
-import io.atomix.protocols.log.protocol.RecordsRequest;
-import io.atomix.protocols.log.protocol.ResetRequest;
-import io.atomix.utils.serializer.Serializer;
 
 /**
  * Raft client protocol that uses a cluster communicator.
  */
 public class LogClientCommunicator implements LogClientProtocol {
   private final LogMessageContext context;
-  private final Serializer serializer;
   private final ClusterCommunicationService clusterCommunicator;
 
-  public LogClientCommunicator(String prefix, Serializer serializer, ClusterCommunicationService clusterCommunicator) {
+  public LogClientCommunicator(String prefix, ClusterCommunicationService clusterCommunicator) {
     this.context = new LogMessageContext(prefix);
-    this.serializer = Preconditions.checkNotNull(serializer, "serializer cannot be null");
     this.clusterCommunicator = Preconditions.checkNotNull(clusterCommunicator, "clusterCommunicator cannot be null");
   }
 
-  private <T> void unicast(String subject, T request, MemberId memberId) {
-    clusterCommunicator.unicast(subject, request, serializer::encode, memberId, false);
+  private <T> void unicast(String subject, T request, Function<T, byte[]> encoder, MemberId memberId) {
+    clusterCommunicator.unicast(subject, request, encoder, memberId, false);
   }
 
-  private <T, U> CompletableFuture<U> send(String subject, T request, MemberId memberId) {
+  private <T, U> CompletableFuture<U> send(String subject, T request, Function<T, byte[]> encoder, Function<byte[], U> decoder, MemberId memberId) {
     CompletableFuture<U> future = new CompletableFuture<>();
-    clusterCommunicator.<T, U>send(subject, request, serializer::encode, serializer::decode, memberId).whenComplete((result, error) -> {
+    clusterCommunicator.send(subject, request, encoder, decoder, memberId).whenComplete((result, error) -> {
       if (error == null) {
         future.complete(result);
       } else {
@@ -70,27 +70,43 @@ public class LogClientCommunicator implements LogClientProtocol {
   }
 
   @Override
-  public CompletableFuture<AppendResponse> append(MemberId memberId, AppendRequest request) {
-    return send(context.appendSubject, request, memberId);
+  public CompletableFuture<AppendResponse> append(String memberId, AppendRequest request) {
+    return send(context.appendSubject, request, this::encode, bytes -> decode(bytes, AppendResponse::parseFrom), MemberId.from(memberId));
   }
 
   @Override
-  public CompletableFuture<ConsumeResponse> consume(MemberId memberId, ConsumeRequest request) {
-    return send(context.consumeSubject, request, memberId);
+  public CompletableFuture<ConsumeResponse> consume(String memberId, ConsumeRequest request) {
+    return send(context.consumeSubject, request, this::encode, bytes -> decode(bytes, ConsumeResponse::parseFrom), MemberId.from(memberId));
   }
 
   @Override
-  public void reset(MemberId memberId, ResetRequest request) {
-    unicast(context.resetSubject, request, memberId);
+  public void reset(String memberId, ResetRequest request) {
+    unicast(context.resetSubject, request, this::encode, MemberId.from(memberId));
   }
 
   @Override
-  public void registerRecordsConsumer(String subject, Consumer<RecordsRequest> handler, Executor executor) {
-    clusterCommunicator.subscribe(subject, serializer::decode, handler, executor);
+  public void registerRecordsConsumer(long consumerId, Consumer<RecordsRequest> handler, Executor executor) {
+    clusterCommunicator.subscribe(context.recordsSubject(consumerId), bytes -> decode(bytes, RecordsRequest::parseFrom), handler, executor);
   }
 
   @Override
-  public void unregisterRecordsConsumer(String subject) {
-    clusterCommunicator.unsubscribe(subject);
+  public void unregisterRecordsConsumer(long consumerId) {
+    clusterCommunicator.unsubscribe(context.recordsSubject(consumerId));
+  }
+
+  private interface Parser<T> {
+    T parse(byte[] bytes) throws InvalidProtocolBufferException;
+  }
+
+  private byte[] encode(Message message) {
+    return message.toByteArray();
+  }
+
+  private <T extends Message> T decode(byte[] bytes, Parser<T> parser) {
+    try {
+      return parser.parse(bytes);
+    } catch (InvalidProtocolBufferException e) {
+      throw new RuntimeException(e);
+    }
   }
 }

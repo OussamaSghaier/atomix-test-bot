@@ -15,14 +15,15 @@
  */
 package io.atomix.core.value.impl;
 
+import java.util.concurrent.CompletableFuture;
+
+import io.atomix.core.value.AsyncAtomicValue;
 import io.atomix.core.value.AtomicValue;
 import io.atomix.core.value.AtomicValueBuilder;
 import io.atomix.core.value.AtomicValueConfig;
+import io.atomix.primitive.ManagedAsyncPrimitive;
 import io.atomix.primitive.PrimitiveManagementService;
-import io.atomix.primitive.service.ServiceConfig;
 import io.atomix.utils.serializer.Serializer;
-
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Default implementation of AtomicValueBuilder.
@@ -37,15 +38,17 @@ public class DefaultAtomicValueBuilder<V> extends AtomicValueBuilder<V> {
   @Override
   @SuppressWarnings("unchecked")
   public CompletableFuture<AtomicValue<V>> buildAsync() {
-    return newProxy(AtomicValueService.class, new ServiceConfig())
-        .thenCompose(proxy -> new AtomicValueProxy(proxy, managementService.getPrimitiveRegistry()).connect())
-        .thenApply(elector -> {
+    return managementService.getPrimitiveRegistry().createPrimitive(name, type)
+        .thenApply(v -> newSingletonProxy(ValueService.TYPE, ValueProxy::new))
+        .thenApply(proxy -> new RawAsyncAtomicValue(proxy, config.getSessionTimeout(), managementService))
+        .thenCompose(ManagedAsyncPrimitive::connect)
+        .thenApply(rawValue -> {
           Serializer serializer = serializer();
           return new TranscodingAsyncAtomicValue<V, byte[]>(
-              elector,
+              rawValue,
               key -> serializer.encode(key),
-              bytes -> serializer.decode(bytes))
-              .sync();
-        });
+              bytes -> serializer.decode(bytes));
+        })
+        .thenApply(AsyncAtomicValue::sync);
   }
 }

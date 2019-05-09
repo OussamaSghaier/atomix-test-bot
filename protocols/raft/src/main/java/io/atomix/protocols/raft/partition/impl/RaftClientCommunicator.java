@@ -15,109 +15,85 @@
  */
 package io.atomix.protocols.raft.partition.impl;
 
-import com.google.common.base.Preconditions;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
+
 import io.atomix.cluster.MemberId;
 import io.atomix.cluster.messaging.ClusterCommunicationService;
-import io.atomix.primitive.session.SessionId;
-import io.atomix.protocols.raft.protocol.CloseSessionRequest;
-import io.atomix.protocols.raft.protocol.CloseSessionResponse;
-import io.atomix.protocols.raft.protocol.CommandRequest;
-import io.atomix.protocols.raft.protocol.CommandResponse;
-import io.atomix.protocols.raft.protocol.HeartbeatRequest;
-import io.atomix.protocols.raft.protocol.HeartbeatResponse;
-import io.atomix.protocols.raft.protocol.KeepAliveRequest;
-import io.atomix.protocols.raft.protocol.KeepAliveResponse;
-import io.atomix.protocols.raft.protocol.MetadataRequest;
-import io.atomix.protocols.raft.protocol.MetadataResponse;
-import io.atomix.protocols.raft.protocol.OpenSessionRequest;
-import io.atomix.protocols.raft.protocol.OpenSessionResponse;
-import io.atomix.protocols.raft.protocol.PublishRequest;
-import io.atomix.protocols.raft.protocol.QueryRequest;
-import io.atomix.protocols.raft.protocol.QueryResponse;
-import io.atomix.protocols.raft.protocol.RaftClientProtocol;
-import io.atomix.protocols.raft.protocol.ResetRequest;
-import io.atomix.utils.serializer.Serializer;
+import io.atomix.cluster.messaging.ClusterStreamingService;
+import io.atomix.primitive.util.ByteArrayDecoder;
+import io.atomix.raft.protocol.CommandRequest;
+import io.atomix.raft.protocol.CommandResponse;
+import io.atomix.raft.protocol.QueryRequest;
+import io.atomix.raft.protocol.QueryResponse;
+import io.atomix.raft.protocol.RaftClientProtocol;
+import io.atomix.utils.stream.StreamHandler;
 
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.function.Consumer;
-import java.util.function.Function;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Raft client protocol that uses a cluster communicator.
  */
 public class RaftClientCommunicator implements RaftClientProtocol {
   private final RaftMessageContext context;
-  private final Serializer serializer;
   private final ClusterCommunicationService clusterCommunicator;
+  private final ClusterStreamingService streamingService;
 
-  public RaftClientCommunicator(Serializer serializer, ClusterCommunicationService clusterCommunicator) {
-    this(null, serializer, clusterCommunicator);
+  public RaftClientCommunicator(ClusterCommunicationService clusterCommunicator, ClusterStreamingService streamingService) {
+    this(null, clusterCommunicator, streamingService);
   }
 
-  public RaftClientCommunicator(String prefix, Serializer serializer, ClusterCommunicationService clusterCommunicator) {
+  public RaftClientCommunicator(String prefix, ClusterCommunicationService clusterCommunicator, ClusterStreamingService streamingService) {
     this.context = new RaftMessageContext(prefix);
-    this.serializer = Preconditions.checkNotNull(serializer, "serializer cannot be null");
-    this.clusterCommunicator = Preconditions.checkNotNull(clusterCommunicator, "clusterCommunicator cannot be null");
+    this.clusterCommunicator = checkNotNull(clusterCommunicator, "clusterCommunicator cannot be null");
+    this.streamingService = checkNotNull(streamingService, "streamingService cannot be null");
   }
 
-  private <T, U> CompletableFuture<U> sendAndReceive(String subject, T request, MemberId memberId) {
-    return clusterCommunicator.send(subject, request, serializer::encode, serializer::decode, memberId);
-  }
-
-  @Override
-  public CompletableFuture<OpenSessionResponse> openSession(MemberId memberId, OpenSessionRequest request) {
-    return sendAndReceive(context.openSessionSubject, request, memberId);
+  private <T, U> CompletableFuture<U> sendAndReceive(
+      String subject, T request, Function<T, byte[]> encoder, Function<byte[], U> decoder, MemberId memberId) {
+    return clusterCommunicator.send(subject, request, encoder, decoder, memberId);
   }
 
   @Override
-  public CompletableFuture<CloseSessionResponse> closeSession(MemberId memberId, CloseSessionRequest request) {
-    return sendAndReceive(context.closeSessionSubject, request, memberId);
+  public CompletableFuture<QueryResponse> query(String server, QueryRequest request) {
+    return sendAndReceive(
+        context.querySubject,
+        request,
+        QueryRequest::toByteArray,
+        bytes -> ByteArrayDecoder.decode(bytes, QueryResponse::parseFrom),
+        MemberId.from(server));
   }
 
   @Override
-  public CompletableFuture<KeepAliveResponse> keepAlive(MemberId memberId, KeepAliveRequest request) {
-    return sendAndReceive(context.keepAliveSubject, request, memberId);
+  public CompletableFuture<Void> queryStream(String server, QueryRequest request, StreamHandler<QueryResponse> handler) {
+    return streamingService.send(
+        context.queryStreamSubject,
+        request,
+        QueryRequest::toByteArray,
+        bytes -> ByteArrayDecoder.decode(bytes, QueryResponse::parseFrom),
+        handler,
+        MemberId.from(server));
   }
 
   @Override
-  public CompletableFuture<QueryResponse> query(MemberId memberId, QueryRequest request) {
-    return sendAndReceive(context.querySubject, request, memberId);
+  public CompletableFuture<CommandResponse> command(String server, CommandRequest request) {
+    return sendAndReceive(
+        context.commandSubject,
+        request,
+        CommandRequest::toByteArray,
+        bytes -> ByteArrayDecoder.decode(bytes, CommandResponse::parseFrom),
+        MemberId.from(server));
+
   }
 
   @Override
-  public CompletableFuture<CommandResponse> command(MemberId memberId, CommandRequest request) {
-    return sendAndReceive(context.commandSubject, request, memberId);
-  }
-
-  @Override
-  public CompletableFuture<MetadataResponse> metadata(MemberId memberId, MetadataRequest request) {
-    return sendAndReceive(context.metadataSubject, request, memberId);
-  }
-
-  @Override
-  public void registerHeartbeatHandler(Function<HeartbeatRequest, CompletableFuture<HeartbeatResponse>> handler) {
-    clusterCommunicator.subscribe(context.heartbeatSubject, serializer::decode, handler, serializer::encode);
-  }
-
-  @Override
-  public void unregisterHeartbeatHandler() {
-    clusterCommunicator.unsubscribe(context.heartbeatSubject);
-  }
-
-  @Override
-  public void reset(Set<MemberId> members, ResetRequest request) {
-    clusterCommunicator.multicast(context.resetSubject(request.session()), request, serializer::encode, members);
-  }
-
-  @Override
-  public void registerPublishListener(SessionId sessionId, Consumer<PublishRequest> listener, Executor executor) {
-    clusterCommunicator.subscribe(context.publishSubject(sessionId.id()), serializer::decode, listener, executor);
-  }
-
-  @Override
-  public void unregisterPublishListener(SessionId sessionId) {
-    clusterCommunicator.unsubscribe(context.publishSubject(sessionId.id()));
+  public CompletableFuture<Void> commandStream(String server, CommandRequest request, StreamHandler<CommandResponse> handler) {
+    return streamingService.send(
+        context.commandStreamSubject,
+        request,
+        CommandRequest::toByteArray,
+        bytes -> ByteArrayDecoder.decode(bytes, CommandResponse::parseFrom),
+        handler,
+        MemberId.from(server));
   }
 }

@@ -15,54 +15,48 @@
  */
 package io.atomix.primitive.session.impl;
 
-import io.atomix.primitive.service.AbstractPrimitiveService;
-import io.atomix.primitive.service.BackupInput;
-import io.atomix.primitive.service.BackupOutput;
-import io.atomix.primitive.service.ServiceExecutor;
-import io.atomix.utils.serializer.Namespace;
-import io.atomix.utils.serializer.Serializer;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import io.atomix.primitive.service.ServiceOperationRegistry;
+import io.atomix.primitive.service.SimplePrimitiveService;
+import io.atomix.primitive.session.impl.proto.NextRequest;
+import io.atomix.primitive.session.impl.proto.NextResponse;
+import io.atomix.primitive.session.impl.proto.SessionIdGeneratorSnapshot;
 
 /**
  * ID generator service.
  */
-public class SessionIdGeneratorService extends AbstractPrimitiveService {
-
-  private static final Serializer SERIALIZER = Serializer.using(Namespace.builder()
-      .register(SessionIdGeneratorOperations.NAMESPACE)
-      .build());
-
+public class SessionIdGeneratorService extends SimplePrimitiveService {
   private long id;
 
-  public SessionIdGeneratorService() {
-    super(SessionIdGeneratorType.instance());
+  @Override
+  public void backup(OutputStream output) throws IOException {
+    SessionIdGeneratorSnapshot.newBuilder()
+        .setId(id)
+        .build()
+        .writeTo(output);
   }
 
   @Override
-  public Serializer serializer() {
-    return SERIALIZER;
+  public void restore(InputStream input) throws IOException {
+    SessionIdGeneratorSnapshot snapshot = SessionIdGeneratorSnapshot.parseFrom(input);
+    id = snapshot.getId();
   }
 
   @Override
-  public void backup(BackupOutput writer) {
-    writer.writeLong(id);
+  protected void configure(ServiceOperationRegistry registry) {
+    registry.register(
+        SessionIdGeneratorOperations.NEXT,
+        this::next,
+        NextRequest::parseFrom,
+        NextResponse::toByteArray);
   }
 
-  @Override
-  public void restore(BackupInput reader) {
-    id = reader.readLong();
-  }
-
-  @Override
-  protected void configure(ServiceExecutor executor) {
-    executor.register(SessionIdGeneratorOperations.NEXT, this::next);
-  }
-
-  /**
-   * Returns the next session ID.
-   *
-   * @return the next session ID
-   */
-  protected long next() {
-    return ++id;
+  protected NextResponse next(NextRequest request) {
+    return NextResponse.newBuilder()
+        .setSessionId(++id)
+        .build();
   }
 }
