@@ -15,18 +15,16 @@
  */
 package io.atomix.cluster.messaging.impl;
 
-import java.io.IOException;
-import java.net.ServerSocket;
-
-import io.atomix.cluster.ClusterConfig;
-import io.atomix.cluster.MemberConfig;
-import io.atomix.cluster.MulticastConfig;
+import io.atomix.cluster.messaging.ManagedBroadcastService;
 import io.atomix.utils.net.Address;
 import net.jodah.concurrentunit.ConcurrentTestCase;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
+
+import java.io.IOException;
+import java.net.ServerSocket;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -37,8 +35,8 @@ public class NettyBroadcastServiceTest extends ConcurrentTestCase {
 
   private static final Logger LOGGER = getLogger(NettyBroadcastServiceTest.class);
 
-  NettyBroadcastService netty1;
-  NettyBroadcastService netty2;
+  ManagedBroadcastService netty1;
+  ManagedBroadcastService netty2;
 
   Address localAddress1;
   Address localAddress2;
@@ -61,19 +59,19 @@ public class NettyBroadcastServiceTest extends ConcurrentTestCase {
     localAddress2 = Address.from("127.0.0.1", findAvailablePort(5002));
     groupAddress = Address.from("230.0.0.1", findAvailablePort(1234));
 
-    netty1 = new NettyBroadcastService();
-    netty1.start(new ClusterConfig()
-        .setNodeConfig(new MemberConfig()
-            .setAddress(localAddress1))
-        .setMulticastConfig(new MulticastConfig()
-            .setGroup(groupAddress.address()))).join();
+    netty1 = (ManagedBroadcastService) NettyBroadcastService.builder()
+        .withLocalAddress(localAddress1)
+        .withGroupAddress(groupAddress)
+        .build()
+        .start()
+        .join();
 
-    netty2 = new NettyBroadcastService();
-    netty2.start(new ClusterConfig()
-        .setNodeConfig(new MemberConfig()
-            .setAddress(localAddress2))
-        .setMulticastConfig(new MulticastConfig()
-            .setGroup(groupAddress.address()))).join();
+    netty2 = (ManagedBroadcastService) NettyBroadcastService.builder()
+        .withLocalAddress(localAddress2)
+        .withGroupAddress(groupAddress)
+        .build()
+        .start()
+        .join();
   }
 
   @After

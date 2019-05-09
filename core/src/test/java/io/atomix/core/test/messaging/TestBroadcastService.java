@@ -15,30 +15,32 @@
  */
 package io.atomix.core.test.messaging;
 
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Consumer;
-
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import io.atomix.cluster.messaging.BroadcastService;
-import io.atomix.utils.component.Component;
-import io.atomix.utils.component.Dependency;
-import io.atomix.utils.component.Managed;
+import io.atomix.cluster.messaging.ManagedBroadcastService;
+
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /**
  * Test broadcast service.
  */
-@Component(scope = Component.Scope.TEST)
-public class TestBroadcastService implements BroadcastService, Managed {
-  @Dependency
-  private TestBroadcastSubstrate substrate;
-
+public class TestBroadcastService implements ManagedBroadcastService {
+  private final Set<TestBroadcastService> services;
   private final Map<String, Set<Consumer<byte[]>>> listeners = Maps.newConcurrentMap();
+  private final AtomicBoolean started = new AtomicBoolean();
+
+  public TestBroadcastService(Set<TestBroadcastService> services) {
+    this.services = services;
+  }
 
   @Override
   public void broadcast(String subject, byte[] message) {
-    substrate.get().forEach(service -> {
+    services.forEach(service -> {
       Set<Consumer<byte[]>> listeners = service.listeners.get(subject);
       if (listeners != null) {
         listeners.forEach(listener -> {
@@ -62,5 +64,24 @@ public class TestBroadcastService implements BroadcastService, Managed {
         this.listeners.remove(subject);
       }
     }
+  }
+
+  @Override
+  public CompletableFuture<BroadcastService> start() {
+    services.add(this);
+    started.set(true);
+    return CompletableFuture.completedFuture(this);
+  }
+
+  @Override
+  public boolean isRunning() {
+    return started.get();
+  }
+
+  @Override
+  public CompletableFuture<Void> stop() {
+    services.remove(this);
+    started.set(false);
+    return CompletableFuture.completedFuture(null);
   }
 }

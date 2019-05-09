@@ -15,6 +15,11 @@
  */
 package io.atomix.storage.journal;
 
+import io.atomix.storage.StorageException;
+import io.atomix.storage.journal.index.JournalIndex;
+import io.atomix.storage.journal.index.Position;
+import io.atomix.utils.serializer.Namespace;
+
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -22,10 +27,6 @@ import java.nio.channels.FileChannel;
 import java.util.NoSuchElementException;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
-
-import io.atomix.storage.StorageException;
-import io.atomix.storage.journal.index.JournalIndex;
-import io.atomix.storage.journal.index.Position;
 
 /**
  * Log segment reader.
@@ -36,7 +37,7 @@ class FileChannelJournalSegmentReader<E> implements JournalReader<E> {
   private final FileChannel channel;
   private final int maxEntrySize;
   private final JournalIndex index;
-  private final JournalCodec<E> codec;
+  private final Namespace namespace;
   private final ByteBuffer memory;
   private final long firstIndex;
   private Indexed<E> currentEntry;
@@ -47,11 +48,11 @@ class FileChannelJournalSegmentReader<E> implements JournalReader<E> {
       JournalSegment<E> segment,
       int maxEntrySize,
       JournalIndex index,
-      JournalCodec<E> codec) {
+      Namespace namespace) {
     this.channel = channel;
     this.maxEntrySize = maxEntrySize;
     this.index = index;
-    this.codec = codec;
+    this.namespace = namespace;
     this.memory = ByteBuffer.allocate((maxEntrySize + Integer.BYTES + Integer.BYTES) * 2);
     this.firstIndex = segment.index();
     reset();
@@ -181,7 +182,7 @@ class FileChannelJournalSegmentReader<E> implements JournalReader<E> {
         if (checksum == crc32.getValue()) {
           int limit = memory.limit();
           memory.limit(memory.position() + length);
-          E entry = codec.decode(memory);
+          E entry = namespace.deserialize(memory);
           memory.limit(limit);
           nextEntry = new Indexed<>(index, entry, length);
         } else {

@@ -32,6 +32,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import com.google.common.collect.Sets;
 import io.atomix.storage.StorageException;
 import io.atomix.storage.StorageLevel;
+import io.atomix.utils.serializer.Namespace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,7 +60,7 @@ public class SegmentedJournal<E> implements Journal<E> {
   private final String name;
   private final StorageLevel storageLevel;
   private final File directory;
-  private final JournalCodec<E> codec;
+  private final Namespace namespace;
   private final int maxSegmentSize;
   private final int maxEntrySize;
   private final int maxEntriesPerSegment;
@@ -78,7 +79,7 @@ public class SegmentedJournal<E> implements Journal<E> {
       String name,
       StorageLevel storageLevel,
       File directory,
-      JournalCodec<E> codec,
+      Namespace namespace,
       int maxSegmentSize,
       int maxEntrySize,
       int maxEntriesPerSegment,
@@ -87,7 +88,7 @@ public class SegmentedJournal<E> implements Journal<E> {
     this.name = checkNotNull(name, "name cannot be null");
     this.storageLevel = checkNotNull(storageLevel, "storageLevel cannot be null");
     this.directory = checkNotNull(directory, "directory cannot be null");
-    this.codec = checkNotNull(codec, "codec cannot be null");
+    this.namespace = checkNotNull(namespace, "namespace cannot be null");
     this.maxSegmentSize = maxSegmentSize;
     this.maxEntrySize = maxEntrySize;
     this.maxEntriesPerSegment = maxEntriesPerSegment;
@@ -459,7 +460,7 @@ public class SegmentedJournal<E> implements Journal<E> {
    * @return The segment instance.
    */
   protected JournalSegment<E> newSegment(JournalSegmentFile segmentFile, JournalSegmentDescriptor descriptor) {
-    return new JournalSegment<>(segmentFile, descriptor, storageLevel, maxEntrySize, indexDensity, codec);
+    return new JournalSegment<>(segmentFile, descriptor, storageLevel, maxEntrySize, indexDensity, namespace);
   }
 
   /**
@@ -679,7 +680,7 @@ public class SegmentedJournal<E> implements Journal<E> {
     protected String name = DEFAULT_NAME;
     protected StorageLevel storageLevel = StorageLevel.DISK;
     protected File directory = new File(DEFAULT_DIRECTORY);
-    protected JournalCodec<E> codec;
+    protected Namespace namespace;
     protected int maxSegmentSize = DEFAULT_MAX_SEGMENT_SIZE;
     protected int maxEntrySize = DEFAULT_MAX_ENTRY_SIZE;
     protected int maxEntriesPerSegment = DEFAULT_MAX_ENTRIES_PER_SEGMENT;
@@ -742,13 +743,13 @@ public class SegmentedJournal<E> implements Journal<E> {
     }
 
     /**
-     * Sets the journal codec, returning the builder for method chaining.
+     * Sets the journal namespace, returning the builder for method chaining.
      *
-     * @param codec The journal codec.
+     * @param namespace The journal serializer.
      * @return The journal builder.
      */
-    public Builder<E> withCodec(JournalCodec<E> codec) {
-      this.codec = checkNotNull(codec, "codec cannot be null");
+    public Builder<E> withNamespace(Namespace namespace) {
+      this.namespace = checkNotNull(namespace, "namespace cannot be null");
       return this;
     }
 
@@ -873,7 +874,7 @@ public class SegmentedJournal<E> implements Journal<E> {
           name,
           storageLevel,
           directory,
-          codec,
+          namespace,
           maxSegmentSize,
           maxEntrySize,
           maxEntriesPerSegment,

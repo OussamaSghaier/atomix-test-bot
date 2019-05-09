@@ -21,9 +21,7 @@ import io.atomix.core.value.AtomicValue;
 import io.atomix.core.value.AtomicValueEventListener;
 import io.atomix.primitive.PrimitiveException;
 import io.atomix.primitive.Synchronous;
-import io.atomix.utils.time.Versioned;
 
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -46,28 +44,23 @@ public class BlockingAtomicValue<V> extends Synchronous<AsyncAtomicValue<V>> imp
   }
 
   @Override
-  public Optional<Versioned<V>> compareAndSet(V expect, V update) {
+  public boolean compareAndSet(V expect, V update) {
     return complete(asyncValue.compareAndSet(expect, update));
   }
 
   @Override
-  public Optional<Versioned<V>> compareAndSet(long version, V value) {
-    return complete(asyncValue.compareAndSet(version, value));
-  }
-
-  @Override
-  public Versioned<V> get() {
+  public V get() {
     return complete(asyncValue.get());
   }
 
   @Override
-  public Versioned<V> getAndSet(V value) {
+  public V getAndSet(V value) {
     return complete(asyncValue.getAndSet(value));
   }
 
   @Override
-  public Versioned<V> set(V value) {
-    return complete(asyncValue.set(value));
+  public void set(V value) {
+    complete(asyncValue.set(value));
   }
 
   @Override

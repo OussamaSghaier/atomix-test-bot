@@ -15,20 +15,19 @@
  */
 package io.atomix.cluster.discovery;
 
+import com.google.common.collect.ImmutableSet;
+import io.atomix.cluster.BootstrapService;
+import io.atomix.cluster.Node;
+import io.atomix.cluster.NodeConfig;
+import io.atomix.utils.event.AbstractListenerManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-
-import com.google.common.collect.ImmutableSet;
-import io.atomix.cluster.Node;
-import io.atomix.cluster.NodeConfig;
-import io.atomix.utils.component.Component;
-import io.atomix.utils.component.Managed;
-import io.atomix.utils.event.AbstractListenerManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -44,10 +43,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * flapping of membership following a {@link io.atomix.cluster.ClusterMembershipEvent.Type#MEMBER_ADDED} event, the implementation attempts
  * to heartbeat all newly discovered peers before triggering a {@link io.atomix.cluster.ClusterMembershipEvent.Type#MEMBER_REMOVED} event.
  */
-@Component(BootstrapDiscoveryConfig.class)
 public class BootstrapDiscoveryProvider
     extends AbstractListenerManager<NodeDiscoveryEvent, NodeDiscoveryEventListener>
-    implements NodeDiscoveryProvider, Managed<BootstrapDiscoveryConfig> {
+    implements NodeDiscoveryProvider {
 
   public static final Type TYPE = new Type();
 
@@ -84,11 +82,8 @@ public class BootstrapDiscoveryProvider
 
   private static final Logger LOGGER = LoggerFactory.getLogger(BootstrapDiscoveryProvider.class);
 
-  private ImmutableSet<Node> bootstrapNodes;
-  private BootstrapDiscoveryConfig config;
-
-  private BootstrapDiscoveryProvider() {
-  }
+  private final ImmutableSet<Node> bootstrapNodes;
+  private final BootstrapDiscoveryConfig config;
 
   public BootstrapDiscoveryProvider(Node... bootstrapNodes) {
     this(Arrays.asList(bootstrapNodes));
@@ -103,6 +98,7 @@ public class BootstrapDiscoveryProvider
 
   BootstrapDiscoveryProvider(BootstrapDiscoveryConfig config) {
     this.config = checkNotNull(config);
+    this.bootstrapNodes = ImmutableSet.copyOf(config.getNodes().stream().map(Node::new).collect(Collectors.toList()));
   }
 
   @Override
@@ -116,15 +112,13 @@ public class BootstrapDiscoveryProvider
   }
 
   @Override
-  public CompletableFuture<Void> start(BootstrapDiscoveryConfig config) {
+  public CompletableFuture<Void> join(BootstrapService bootstrap, Node localNode) {
     LOGGER.info("Joined");
-    this.config = config;
-    this.bootstrapNodes = ImmutableSet.copyOf(config.getNodes().stream().map(Node::new).collect(Collectors.toList()));
     return CompletableFuture.completedFuture(null);
   }
 
   @Override
-  public CompletableFuture<Void> stop() {
+  public CompletableFuture<Void> leave(Node localNode) {
     LOGGER.info("Left");
     return CompletableFuture.completedFuture(null);
   }

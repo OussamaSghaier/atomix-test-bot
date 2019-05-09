@@ -16,6 +16,7 @@
 package io.atomix.core.registry.impl;
 
 import io.atomix.core.AtomixRegistry;
+import io.atomix.core.profile.Profile;
 import io.atomix.primitive.PrimitiveType;
 import io.atomix.primitive.partition.PartitionGroup;
 import io.atomix.primitive.protocol.PrimitiveProtocol;
@@ -38,5 +39,7 @@ public class DefaultRegistryTest {
     assertEquals("raft", registry.getType(PartitionGroup.Type.class, "raft").name());
     assertFalse(registry.getTypes(PrimitiveProtocol.Type.class).isEmpty());
     assertEquals("multi-raft", registry.getType(PrimitiveProtocol.Type.class, "multi-raft").name());
+    assertEquals(3, registry.getTypes(Profile.Type.class).size());
+    assertEquals("client", registry.getType(Profile.Type.class, "client").name());
   }
 }

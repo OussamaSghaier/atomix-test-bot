@@ -15,11 +15,11 @@
  */
 package io.atomix.cluster.messaging.impl;
 
-import java.util.Map;
-
 import com.google.common.collect.Maps;
-import io.atomix.cluster.messaging.UnicastService;
+import io.atomix.cluster.messaging.ManagedUnicastService;
 import io.atomix.utils.net.Address;
+
+import java.util.Map;
 
 /**
  * Test unicast service factory.
@@ -89,7 +89,7 @@ public class TestUnicastServiceFactory {
    * @param address the address to which to bind
    * @return the unicast service for the given endpoint
    */
-  public UnicastService newUnicastService(Address address) {
+  public ManagedUnicastService newUnicastService(Address address) {
     return new TestUnicastService(address, services);
   }
 }

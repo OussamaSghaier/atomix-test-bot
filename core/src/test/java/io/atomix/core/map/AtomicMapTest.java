@@ -15,16 +15,6 @@
  */
 package io.atomix.core.map;
 
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.stream.Collectors;
-
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import io.atomix.core.AbstractPrimitiveTest;
@@ -34,6 +24,17 @@ import io.atomix.core.transaction.Transaction;
 import io.atomix.core.transaction.TransactionalMap;
 import io.atomix.utils.time.Versioned;
 import org.junit.Test;
+
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -46,6 +47,45 @@ import static org.junit.Assert.assertTrue;
  */
 public class AtomicMapTest extends AbstractPrimitiveTest {
 
+  /**
+   * Tests null values.
+   */
+  @Test
+  public void testNullValues() throws Throwable {
+    final String fooValue = "Hello foo!";
+    final String barValue = "Hello bar!";
+
+    AtomicMap<String, String> map = atomix()
+        .<String, String>atomicMapBuilder("testNullValues")
+        .withProtocol(protocol())
+        .withNullValues()
+        .build();
+
+    assertNull(map.get("foo"));
+    assertNull(map.put("foo", null));
+
+    Versioned<String> value = map.put("foo", fooValue);
+    assertNotNull(value);
+    assertNull(value.value());
+
+    value = map.get("foo");
+    assertNotNull(value);
+    assertEquals(fooValue, value.value());
+
+    assertTrue(map.replace("foo", fooValue, null));
+
+    value = map.get("foo");
+    assertNotNull(value);
+    assertNull(value.value());
+
+    assertFalse(map.replace("foo", fooValue, barValue));
+    assertTrue(map.replace("foo", null, barValue));
+
+    value = map.get("foo");
+    assertNotNull(value);
+    assertEquals(barValue, value.value());
+  }
+
   @Test
   public void testBasicMapOperations() throws Throwable {
     final String fooValue = "Hello foo!";
@@ -53,7 +93,6 @@ public class AtomicMapTest extends AbstractPrimitiveTest {
 
     AtomicMap<String, String> map = atomix().<String, String>atomicMapBuilder("testBasicMapOperationMap")
         .withProtocol(protocol())
-        .withSessionTimeout(Duration.ofSeconds(1))
         .build();
 
     assertTrue(map.isEmpty());
@@ -65,10 +104,16 @@ public class AtomicMapTest extends AbstractPrimitiveTest {
     assertNotNull(value);
     assertEquals(fooValue, value.value());
 
+    Map<String, Versioned<String>> values = map.getAllPresent(Collections.singleton("foo"));
+    assertNotNull(values);
+    assertEquals(1, values.size());
+    assertEquals(fooValue, values.get("foo").value());
+
     assertNull(map.putIfAbsent("bar", barValue));
     assertEquals(2, map.size());
 
     assertEquals(2, map.keySet().size());
+    assertTrue(map.keySet().containsAll(Sets.newHashSet("foo", "bar")));
 
     assertEquals(2, map.values().size());
     List<String> rawValues = map.values().stream().map(v -> v.value()).collect(Collectors.toList());
@@ -87,6 +132,8 @@ public class AtomicMapTest extends AbstractPrimitiveTest {
     assertEquals(barValue, value.value());
     assertTrue(map.containsKey("bar"));
     assertEquals(1, map.size());
+    assertTrue(map.containsValue(barValue));
+    assertFalse(map.containsValue(fooValue));
 
     value = map.replace("bar", "Goodbye bar!");
     assertNotNull(value);
@@ -149,7 +196,6 @@ public class AtomicMapTest extends AbstractPrimitiveTest {
 
     AtomicMap<String, String> map = atomix().<String, String>atomicMapBuilder("testMapListenerMap")
         .withProtocol(protocol())
-        .withSessionTimeout(Duration.ofSeconds(5))
         .build();
     TestAtomicMapEventListener listener = new TestAtomicMapEventListener();
 
@@ -158,7 +204,7 @@ public class AtomicMapTest extends AbstractPrimitiveTest {
     map.put("foo", value1);
     AtomicMapEvent<String, String> event = listener.event();
     assertNotNull(event);
-    assertEquals(AtomicMapEvent.Type.INSERTED, event.type());
+    assertEquals(AtomicMapEvent.Type.INSERT, event.type());
     assertEquals(value1, event.newValue().value());
 
     // remove listener and verify listener is not notified.
@@ -171,7 +217,7 @@ public class AtomicMapTest extends AbstractPrimitiveTest {
     map.put("foo", value3);
     event = listener.event();
     assertNotNull(event);
-    assertEquals(AtomicMapEvent.Type.UPDATED, event.type());
+    assertEquals(AtomicMapEvent.Type.UPDATE, event.type());
     assertEquals(value3, event.newValue().value());
 
     // perform a non-state changing operation and verify no events are received.
@@ -182,37 +228,37 @@ public class AtomicMapTest extends AbstractPrimitiveTest {
     map.remove("foo");
     event = listener.event();
     assertNotNull(event);
-    assertEquals(AtomicMapEvent.Type.REMOVED, event.type());
+    assertEquals(AtomicMapEvent.Type.REMOVE, event.type());
     assertEquals(value3, event.oldValue().value());
 
     // verify compute methods also generate events.
     map.computeIf("foo", v -> v == null, (k, v) -> value1);
     event = listener.event();
     assertNotNull(event);
-    assertEquals(AtomicMapEvent.Type.INSERTED, event.type());
+    assertEquals(AtomicMapEvent.Type.INSERT, event.type());
     assertEquals(value1, event.newValue().value());
 
     map.compute("foo", (k, v) -> value2);
     event = listener.event();
     assertNotNull(event);
-    assertEquals(AtomicMapEvent.Type.UPDATED, event.type());
+    assertEquals(AtomicMapEvent.Type.UPDATE, event.type());
     assertEquals(value2, event.newValue().value());
 
     map.computeIf("foo", v -> Objects.equals(v, value2), (k, v) -> null);
     event = listener.event();
     assertNotNull(event);
-    assertEquals(AtomicMapEvent.Type.REMOVED, event.type());
+    assertEquals(AtomicMapEvent.Type.REMOVE, event.type());
     assertEquals(value2, event.oldValue().value());
 
     map.put("bar", "expire", Duration.ofSeconds(1));
     event = listener.event();
     assertNotNull(event);
-    assertEquals(AtomicMapEvent.Type.INSERTED, event.type());
+    assertEquals(AtomicMapEvent.Type.INSERT, event.type());
     assertEquals("expire", event.newValue().value());
 
     event = listener.event();
     assertNotNull(event);
-    assertEquals(AtomicMapEvent.Type.REMOVED, event.type());
+    assertEquals(AtomicMapEvent.Type.REMOVE, event.type());
     assertEquals("expire", event.oldValue().value());
 
     map.removeListener(listener);
@@ -223,15 +269,6 @@ public class AtomicMapTest extends AbstractPrimitiveTest {
     AtomicMap<String, String> map = atomix().<String, String>atomicMapBuilder("testMapViews")
         .withProtocol(protocol())
         .build();
-
-    assertFalse(map.keySet().iterator().hasNext());
-    assertFalse(map.entrySet().iterator().hasNext());
-    assertFalse(map.values().iterator().hasNext());
-
-    assertEquals(0, map.size());
-    assertEquals(0, map.keySet().size());
-    assertEquals(0, map.entrySet().size());
-    assertEquals(0, map.values().size());
 
     assertTrue(map.isEmpty());
     assertTrue(map.keySet().isEmpty());
@@ -261,6 +298,9 @@ public class AtomicMapTest extends AbstractPrimitiveTest {
     String four = String.valueOf(4);
 
     assertTrue(map.keySet().contains(one));
+    assertTrue(map.values().contains(new Versioned<>(one, 0)));
+    assertTrue(map.entrySet().contains(Maps.immutableEntry(one, new Versioned<>(one, 0))));
+    assertTrue(map.keySet().containsAll(Arrays.asList(one, two, three, four)));
 
     assertTrue(map.keySet().remove(one));
     assertFalse(map.keySet().contains(one));
@@ -355,6 +395,11 @@ public class AtomicMapTest extends AbstractPrimitiveTest {
         .build();
     assertEquals("baz", map.get("foo").value());
     assertEquals("baz", map.get("bar").value());
+
+    Map<String, Versioned<String>> result = map.getAllPresent(Collections.singleton("foo"));
+    assertNotNull(result);
+    assertTrue(result.size() == 1);
+    assertEquals("baz", result.get("foo").value());
   }
 
   private static class TestAtomicMapEventListener implements AtomicMapEventListener<String, String> {

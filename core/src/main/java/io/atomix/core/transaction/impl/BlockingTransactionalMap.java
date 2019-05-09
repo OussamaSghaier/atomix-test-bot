@@ -15,16 +15,17 @@
  */
 package io.atomix.core.transaction.impl;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
 import com.google.common.base.Throwables;
 import io.atomix.core.transaction.AsyncTransactionalMap;
 import io.atomix.core.transaction.TransactionalMap;
 import io.atomix.primitive.PrimitiveException;
 import io.atomix.primitive.PrimitiveType;
+import io.atomix.primitive.protocol.PrimitiveProtocol;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Blocking transactional map.
@@ -46,6 +47,11 @@ public class BlockingTransactionalMap<K, V> implements TransactionalMap<K, V> {
   @Override
   public PrimitiveType type() {
     return asyncMap.type();
+  }
+
+  @Override
+  public PrimitiveProtocol protocol() {
+    return asyncMap.protocol();
   }
 
   @Override

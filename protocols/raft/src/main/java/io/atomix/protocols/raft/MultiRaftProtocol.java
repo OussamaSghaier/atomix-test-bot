@@ -15,9 +15,20 @@
  */
 package io.atomix.protocols.raft;
 
+import io.atomix.primitive.PrimitiveType;
+import io.atomix.primitive.partition.PartitionGroup;
+import io.atomix.primitive.partition.PartitionService;
 import io.atomix.primitive.protocol.PrimitiveProtocol;
 import io.atomix.primitive.protocol.ProxyProtocol;
-import io.atomix.utils.component.Component;
+import io.atomix.primitive.proxy.ProxyClient;
+import io.atomix.primitive.proxy.impl.DefaultProxyClient;
+import io.atomix.primitive.service.ServiceConfig;
+import io.atomix.primitive.session.SessionClient;
+import io.atomix.protocols.raft.partition.RaftPartition;
+import io.atomix.utils.config.ConfigurationException;
+
+import java.util.Collection;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -58,7 +69,6 @@ public class MultiRaftProtocol implements ProxyProtocol {
   /**
    * Multi-Raft protocol type.
    */
-  @Component
   public static final class Type implements PrimitiveProtocol.Type<MultiRaftProtocolConfig> {
     private static final String NAME = "multi-raft";
 
@@ -92,5 +102,27 @@ public class MultiRaftProtocol implements ProxyProtocol {
   @Override
   public String group() {
     return config.getGroup();
+  }
+
+  @Override
+  public <S> ProxyClient<S> newProxy(String primitiveName, PrimitiveType primitiveType, Class<S> serviceType, ServiceConfig serviceConfig, PartitionService partitionService) {
+    PartitionGroup partitionGroup = partitionService.getPartitionGroup(this);
+    if (partitionGroup == null) {
+      throw new ConfigurationException("No Raft partition group matching the configured protocol exists");
+    }
+
+    Collection<SessionClient> partitions = partitionGroup.getPartitions().stream()
+        .map(partition -> ((RaftPartition) partition).getClient()
+            .sessionBuilder(primitiveName, primitiveType, serviceConfig)
+            .withMinTimeout(config.getMinTimeout())
+            .withMaxTimeout(config.getMaxTimeout())
+            .withReadConsistency(config.getReadConsistency())
+            .withCommunicationStrategy(config.getCommunicationStrategy())
+            .withRecoveryStrategy(config.getRecoveryStrategy())
+            .withMaxRetries(config.getMaxRetries())
+            .withRetryDelay(config.getRetryDelay())
+            .build())
+        .collect(Collectors.toList());
+    return new DefaultProxyClient<>(primitiveName, primitiveType, this, serviceType, partitions, config.getPartitioner());
   }
 }

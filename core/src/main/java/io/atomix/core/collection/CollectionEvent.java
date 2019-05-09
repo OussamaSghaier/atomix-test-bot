@@ -31,12 +31,12 @@ public final class CollectionEvent<E> extends AbstractEvent<CollectionEvent.Type
     /**
      * Entry added to the set.
      */
-    ADDED,
+    ADD,
 
     /**
      * Entry removed from the set.
      */
-    REMOVED
+    REMOVE
   }
 
   /**

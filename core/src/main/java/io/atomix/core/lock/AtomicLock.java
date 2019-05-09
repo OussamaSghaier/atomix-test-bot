@@ -15,21 +15,16 @@
  */
 package io.atomix.core.lock;
 
-import java.time.Duration;
-import java.util.Optional;
-
-import io.atomix.primitive.PrimitiveType;
 import io.atomix.primitive.SyncPrimitive;
 import io.atomix.utils.time.Version;
+
+import java.time.Duration;
+import java.util.Optional;
 
 /**
  * Asynchronous lock primitive.
  */
 public interface AtomicLock extends SyncPrimitive {
-  @Override
-  default PrimitiveType type() {
-    return AtomicLockType.instance();
-  }
 
   /**
    * Acquires the lock, blocking until it's available.
@@ -72,14 +67,6 @@ public interface AtomicLock extends SyncPrimitive {
    * Unlocks the lock.
    */
   void unlock();
-
-  /**
-   * Unlocks the lock.
-   *
-   * @param version the lock version
-   * @return indicates whether the lock was successfully unlocked
-   */
-  boolean unlock(Version version);
 
   @Override
   AsyncAtomicLock async();
